@@ -7,8 +7,10 @@
 *.dylib
 
 # Binaries
-pipeline_encrypt*
-pipeline_decrypt*
+pipeline_encrypt
+!pipeline_encrypt*.cpp
+pipeline_decrypt
+!pipeline_decrypt*.cpp
 analyze_video
 
 # Test outputs
