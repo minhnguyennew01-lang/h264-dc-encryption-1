@@ -1,0 +1,39 @@
+# Build artifacts
+*.o
+*.out
+*.exe
+*.a
+*.so
+*.dylib
+
+# Binaries
+pipeline_encrypt*
+pipeline_decrypt*
+analyze_video
+
+# Test outputs
+output_encrypted*
+output_recovered*
+test_*
+*.meta
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Dependencies
+.dependencies
+
+# Large video files
+*.h264
+*.mp4
+*.mkv
+*.avi
+output*
