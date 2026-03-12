@@ -6,12 +6,14 @@
 *.so
 *.dylib
 
-# Binaries
-pipeline_encrypt
+# Binaries (compiled executables)
+/pipeline_encrypt_simple_metadata
+/pipeline_decrypt_simple_metadata
+/pipeline_encrypt_final
+/analyze_video
+# But DO track the source files
 !pipeline_encrypt*.cpp
-pipeline_decrypt
 !pipeline_decrypt*.cpp
-analyze_video
 
 # Test outputs
 output_encrypted*
