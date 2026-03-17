@@ -3,6 +3,7 @@
 #include <vector>
 #include <cstring>
 #include <cstdint>
+#include "encryption.h"
 
 struct NALUMetadata {
     uint32_t nalu_index;
@@ -76,11 +77,14 @@ int main(int argc, char* argv[]) {
 
     std::cout << "[2/5] Restoring NALUs to original size\n";
 
-    // Restore to original size
+    // Restore to original size and decrypt
     for (uint32_t i = 0; i < num_nalus; i++) {
         std::vector<uint8_t> restored_nalu = encrypted_nalus[i];
         uint32_t original_size = nalu_metadata[i].original_size;
         uint32_t encrypted_size = nalu_metadata[i].encrypted_size;
+
+        // First decrypt the NALU
+        restored_nalu = decrypt_dc_coefficients(restored_nalu, key_bytes);
 
         if (encrypted_size < original_size) {
             // Add padding

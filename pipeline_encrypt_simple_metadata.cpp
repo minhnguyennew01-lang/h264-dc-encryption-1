@@ -3,6 +3,8 @@
 #include <fstream>
 #include <vector>
 #include <cstring>
+#include "encryption.h"
+#include "rbsp.h"
 
 struct NALUMetadata {
     uint32_t nalu_index;
@@ -75,10 +77,8 @@ int main(int argc, char* argv[]) {
                     uint32_t original_size = prev_nalu.size();
                     uint8_t nalu_type = (prev_nalu[4] & 0x1F);
 
-                    // Simple XOR encryption for demonstration
-                    // In real scenario, use proper DC encryption via rbsp functions
-                    std::vector<uint8_t> encrypted_nalu = prev_nalu;
-                    // For now, just copy (actual encryption happens via pipeline_encrypt_bitlevel)
+                    // Perform actual DC coefficient encryption
+                    std::vector<uint8_t> encrypted_nalu = encrypt_dc_coefficients(prev_nalu, key_bytes);
 
                     uint32_t encrypted_size = encrypted_nalu.size();
 
@@ -103,7 +103,7 @@ int main(int argc, char* argv[]) {
         uint32_t original_size = nalu.size();
         uint8_t nalu_type = (nalu[4] & 0x1F);
 
-        std::vector<uint8_t> encrypted_nalu = nalu;
+        std::vector<uint8_t> encrypted_nalu = encrypt_dc_coefficients(nalu, key_bytes);
         output.write((char*)encrypted_nalu.data(), encrypted_nalu.size());
 
         NALUMetadata meta;

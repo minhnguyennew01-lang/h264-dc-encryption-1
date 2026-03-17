@@ -20,23 +20,23 @@ ENCRYPT_OBJECTS = $(ENCRYPT_SOURCES:.cpp=.o)
 
 # Decryption with metadata program (MAIN)
 DECRYPT_TARGET = pipeline_decrypt_simple_metadata
-DECRYPT_SOURCES = pipeline_decrypt_simple_metadata.cpp $(COMMON_SOURCES)
+DECRYPT_SOURCES = pipeline_decrypt_simple_metadata.cpp encryption.cpp $(COMMON_SOURCES)
 DECRYPT_OBJECTS = $(DECRYPT_SOURCES:.cpp=.o)
 
-# Final DC encryption program (fixed - preserves file size)
-ENCRYPT_FINAL_TARGET = pipeline_encrypt_final
-ENCRYPT_FINAL_SOURCES = pipeline_encrypt_final.cpp encryption.cpp $(COMMON_SOURCES)
-ENCRYPT_FINAL_OBJECTS = $(ENCRYPT_FINAL_SOURCES:.cpp=.o)
+# DC Extraction Tool
+EXTRACT_DC_TARGET = extract_dc
+EXTRACT_DC_SOURCES = extract_dc.cpp $(COMMON_SOURCES)
+EXTRACT_DC_OBJECTS = $(EXTRACT_DC_SOURCES:.cpp=.o)
 
 # Default target
 .PHONY: all
-all: $(ENCRYPT_TARGET) $(DECRYPT_TARGET) $(ENCRYPT_FINAL_TARGET)
+all: $(ENCRYPT_TARGET) $(DECRYPT_TARGET) $(EXTRACT_DC_TARGET)
 	@echo ""
 	@echo "╔════════════════════════════════════════════════════════╗"
 	@echo "║  Build Complete!                                       ║"
 	@echo "║  Encryption:        ./$(ENCRYPT_TARGET)                ║"
-	@echo "║  Encryption (DC):   ./$(ENCRYPT_FINAL_TARGET)          ║"
 	@echo "║  Decryption:        ./$(DECRYPT_TARGET)                ║"
+	@echo "║  DC Extraction:     ./$(EXTRACT_DC_TARGET)             ║"
 	@echo "╚════════════════════════════════════════════════════════╝"
 	@echo ""
 
@@ -50,13 +50,8 @@ $(DECRYPT_TARGET): $(DECRYPT_OBJECTS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 	@echo "✓ Compiled: $@"
 
-# Final DC encryption target (fixed version)
-$(ENCRYPT_FINAL_TARGET): $(ENCRYPT_FINAL_OBJECTS)
-	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
-	@echo "✓ Compiled: $@"
-
-# DC-only encryption target (old version - deprecated)
-$(ENCRYPT_DC_TARGET): $(ENCRYPT_DC_OBJECTS)
+# DC Extraction target
+$(EXTRACT_DC_TARGET): $(EXTRACT_DC_OBJECTS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 	@echo "✓ Compiled: $@"
 
@@ -64,13 +59,13 @@ $(ENCRYPT_DC_TARGET): $(ENCRYPT_DC_OBJECTS)
 .PHONY: encrypt
 encrypt: $(ENCRYPT_TARGET)
 
-# DC-only encryption (final version)
-.PHONY: encrypt-final
-encrypt-final: $(ENCRYPT_FINAL_TARGET)
+# Decryption only
+.PHONY: decrypt
+decrypt: $(DECRYPT_TARGET)
 
-# DC-only encryption (old version)
-.PHONY: encrypt-dc
-encrypt-dc: $(ENCRYPT_DC_TARGET)
+# DC Extraction only
+.PHONY: extract-dc
+extract-dc: $(EXTRACT_DC_TARGET)
 
 # Object files
 %.o: %.cpp
@@ -80,8 +75,8 @@ encrypt-dc: $(ENCRYPT_DC_TARGET)
 # Clean build artifacts
 .PHONY: clean
 clean:
-	rm -f $(ENCRYPT_OBJECTS) $(DECRYPT_OBJECTS) $(ENCRYPT_DC_OBJECTS) $(ENCRYPT_FINAL_OBJECTS)
-	rm -f $(ENCRYPT_TARGET) $(DECRYPT_TARGET) $(ENCRYPT_DC_TARGET) $(ENCRYPT_FINAL_TARGET)
+	rm -f *.o
+	rm -f $(ENCRYPT_TARGET) $(DECRYPT_TARGET) $(EXTRACT_DC_TARGET)
 	@echo "Cleaned: all build artifacts removed"
 
 # Help
@@ -97,13 +92,13 @@ help:
 	@echo "  make help     - Show this help message"
 	@echo ""
 	@echo "Usage:"
-	@echo "  ./pipeline_encrypt <input> <output> <key>"
-	@echo "  ./pipeline_decrypt <input> <output> <key>"
+	@echo "  ./$(ENCRYPT_TARGET) <input.h264> <output.h264> \"key\""
+	@echo "  ./$(DECRYPT_TARGET) <input.h264> <output.h264>"
 	@echo ""
 	@echo "Example:"
 	@echo "  make all"
-	@echo "  ./pipeline_encrypt video.h264 encrypted.h264 \"mykey\""
-	@echo "  ./pipeline_decrypt encrypted.h264 decrypted.h264 \"mykey\""
+	@echo "  ./$(ENCRYPT_TARGET) video.h264 encrypted.h264 \"mykey\""
+	@echo "  ./$(DECRYPT_TARGET) encrypted.h264 decrypted.h264"
 	@echo "  diff video.h264 decrypted.h264  # Should be identical"
 	@echo ""
 
