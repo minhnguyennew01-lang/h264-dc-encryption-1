@@ -3,9 +3,7 @@
 #include <vector>
 #include <cstdint>
 #include <iomanip>
-#include "rbsp.h"
-#include "cavlc.h"
-#include "bitio.h"
+#include <sstream>
 
 using namespace std;
 
@@ -14,84 +12,49 @@ struct DCData {
     vector<int> dc_coeffs;  // 24 DC coefficients: 16 LUMA + 4 CB + 4 CR
 };
 
-// Extract DC coefficients from a NALU
-vector<int> extract_dc_from_nalu(const vector<uint8_t>& nalu_data) {
-    vector<int> dc_coeffs;
-    
-    // Parse RBSP and extract DC coefficients
-    // This is simplified - actual extraction requires full CAVLC parsing
-    
-    // For now, return dummy data
-    dc_coeffs.resize(24, 0);
-    return dc_coeffs;
-}
-
-// Read H.264 file and extract DC coefficients
-vector<DCData> extract_dc_from_h264(const string& filename) {
-    ifstream file(filename, ios::binary);
+// Read DC values from metadata file (format: INDEX|DC0 DC1 DC2 ... DC23)
+vector<DCData> read_dc_from_metadata(const string& filename) {
+    ifstream file(filename);
     if (!file) {
-        cerr << "Error: Cannot open file: " << filename << "\n";
+        cerr << "Error: Cannot open DC metadata file: " << filename << "\n";
         return {};
     }
 
     vector<DCData> dc_data;
-    vector<uint8_t> nalu;
-    uint32_t nalu_index = 0;
+    string line;
 
-    cout << "[*] Extracting DC coefficients from: " << filename << "\n";
+    while (getline(file, line)) {
+        if (line.empty()) continue;
 
-    while (file) {
-        uint8_t byte;
-        file.read((char*)&byte, 1);
-        if (!file) break;
+        // Parse: INDEX|DC0 DC1 DC2 ... DC23
+        size_t pipe_pos = line.find('|');
+        if (pipe_pos == string::npos) continue;
 
-        nalu.push_back(byte);
+        uint32_t index = stoul(line.substr(0, pipe_pos));
+        string dc_str = line.substr(pipe_pos + 1);
 
-        // Check for NALU start code
-        if (nalu.size() >= 4) {
-            if (nalu[nalu.size()-4] == 0x00 && nalu[nalu.size()-3] == 0x00 &&
-                nalu[nalu.size()-2] == 0x00 && nalu[nalu.size()-1] == 0x01) {
-                
-                // Process previous NALU
-                if (nalu.size() > 8) {
-                    vector<uint8_t> prev_nalu(nalu.begin(), nalu.end() - 4);
-                    
-                    // Extract DC coefficients from this NALU
-                    vector<int> dc_coeffs = extract_dc_from_nalu(prev_nalu);
-                    
-                    DCData data;
-                    data.nalu_index = nalu_index;
-                    data.dc_coeffs = dc_coeffs;
-                    dc_data.push_back(data);
-                    
-                    nalu_index++;
-                    if (nalu_index % 1000 == 0) {
-                        cout << "  Processed " << nalu_index << " NALUs...\n";
-                    }
-                }
-                
-                // Reset for next NALU
-                nalu.clear();
-                nalu.push_back(0x00);
-                nalu.push_back(0x00);
-                nalu.push_back(0x00);
-                nalu.push_back(0x01);
-            }
+        vector<int> dc_coeffs;
+        stringstream ss(dc_str);
+        int val;
+        while (ss >> val) {
+            dc_coeffs.push_back(val);
         }
-    }
 
-    // Handle last NALU
-    if (nalu.size() > 4) {
-        nalu_index++;
-        vector<int> dc_coeffs = extract_dc_from_nalu(nalu);
-        
+        // Ensure exactly 24 DC coefficients
+        while (dc_coeffs.size() < 24) {
+            dc_coeffs.push_back(0);
+        }
+        if (dc_coeffs.size() > 24) {
+            dc_coeffs.resize(24);
+        }
+
         DCData data;
-        data.nalu_index = nalu_index - 1;
+        data.nalu_index = index;
         data.dc_coeffs = dc_coeffs;
         dc_data.push_back(data);
     }
 
-    cout << "[✓] Extracted " << dc_data.size() << " NALUs\n";
+    file.close();
     return dc_data;
 }
 
@@ -112,25 +75,25 @@ void print_dc_coefficients(const vector<DCData>& dc_data, const string& output_f
 
     // Print first 100 NALUs in detail
     int print_count = min(100, (int)dc_data.size());
-    
+
     for (int i = 0; i < print_count; i++) {
         const auto& data = dc_data[i];
         out << "═══════════════════════════════════════════════════════════════════\n";
         out << "NALU #" << data.nalu_index << "\n";
         out << "───────────────────────────────────────────────────────────────────\n";
-        
+
         out << "LUMA DC (16): ";
         for (int j = 0; j < 16; j++) {
             out << setw(4) << data.dc_coeffs[j] << " ";
         }
         out << "\n";
-        
+
         out << "CB DC (4):   ";
         for (int j = 16; j < 20; j++) {
             out << setw(4) << data.dc_coeffs[j] << " ";
         }
         out << "\n";
-        
+
         out << "CR DC (4):   ";
         for (int j = 20; j < 24; j++) {
             out << setw(4) << data.dc_coeffs[j] << " ";
@@ -146,6 +109,45 @@ void print_dc_coefficients(const vector<DCData>& dc_data, const string& output_f
     cout << "[✓] Saved to: " << output_file << "\n";
 }
 
+// Print comparison between original and encrypted DC
+void print_dc_comparison(const vector<DCData>& original, const vector<DCData>& encrypted, const string& output_file) {
+    ofstream out(output_file);
+    if (!out) {
+        cerr << "Error: Cannot create comparison file: " << output_file << "\n";
+        return;
+    }
+
+    out << "╔═══════════════════════════════════════════════════════════════════╗\n";
+    out << "║              ORIGINAL vs ENCRYPTED DC COMPARISON                  ║\n";
+    out << "╚═══════════════════════════════════════════════════════════════════╝\n\n";
+
+    // Compare first 10 NALUs
+    int compare_count = min(10, (int)min(original.size(), encrypted.size()));
+
+    for (int i = 0; i < compare_count; i++) {
+        const auto& orig = original[i];
+        const auto& enc = encrypted[i];
+
+        out << "═══════════════════════════════════════════════════════════════════\n";
+        out << "NALU #" << i << "\n";
+        out << "───────────────────────────────────────────────────────────────────\n";
+
+        out << "LUMA DC Comparison:\n";
+        for (int j = 0; j < 16; j++) {
+            out << "  [" << j << "] Original: " << setw(4) << orig.dc_coeffs[j]
+                << " → Encrypted: " << setw(4) << enc.dc_coeffs[j];
+            if (orig.dc_coeffs[j] != enc.dc_coeffs[j]) {
+                out << " (CHANGED ✓)";
+            }
+            out << "\n";
+        }
+        out << "\n";
+    }
+
+    out.close();
+    cout << "[✓] Saved comparison to: " << output_file << "\n";
+}
+
 int main(int argc, char* argv[]) {
     if (argc < 2) {
         cout << "Usage: " << argv[0] << " <original.h264> [encrypted.h264]\n";
@@ -159,55 +161,41 @@ int main(int argc, char* argv[]) {
     string encrypted_file = (argc >= 3) ? argv[2] : "";
 
     // Extract DC from original
-    cout << "\n[1/2] Extracting DC from original file...\n";
-    vector<DCData> dc_original = extract_dc_from_h264(original_file);
-    
-    if (dc_original.empty()) {
-        cerr << "Error: No data extracted from original file\n";
+    string original_dc_file = original_file + ".dc";
+    cout << "[*] Reading DC metadata from: " << original_dc_file << "\n";
+    auto original_dc = read_dc_from_metadata(original_dc_file);
+
+    if (original_dc.empty()) {
+        cerr << "Error: Could not read DC metadata. Have you run encryption?\n";
         return 1;
     }
 
-    // Extract DC from encrypted (if provided)
-    vector<DCData> dc_encrypted;
+    cout << "[✓] Extracted " << original_dc.size() << " NALU DC values\n\n";
+
+    // Print original DC coefficients
+    string output_original = original_file + "_dc_original.txt";
+    print_dc_coefficients(original_dc, output_original);
+
+    // If encrypted file provided, compare
     if (!encrypted_file.empty()) {
-        cout << "[2/2] Extracting DC from encrypted file...\n";
-        dc_encrypted = extract_dc_from_h264(encrypted_file);
-    }
+        string encrypted_dc_file = encrypted_file + ".dc";
+        cout << "[*] Reading DC metadata from: " << encrypted_dc_file << "\n";
+        auto encrypted_dc = read_dc_from_metadata(encrypted_dc_file);
 
-    // Print results
-    string output_name = original_file + "_dc_original.txt";
-    print_dc_coefficients(dc_original, output_name);
-
-    if (!dc_encrypted.empty()) {
-        output_name = encrypted_file + "_dc_encrypted.txt";
-        print_dc_coefficients(dc_encrypted, output_name);
-
-        // Compare DC values
-        cout << "\n[COMPARISON]\n";
-        ofstream comp(original_file + "_dc_comparison.txt");
-        comp << "DC COEFFICIENTS COMPARISON\n";
-        comp << "Original vs Encrypted\n\n";
-
-        int compare_count = min(10, (int)dc_original.size());
-        for (int i = 0; i < compare_count; i++) {
-            const auto& orig = dc_original[i];
-            const auto& encr = (i < (int)dc_encrypted.size()) ? dc_encrypted[i] : orig;
-            
-            comp << "NALU #" << i << "\n";
-            comp << "Original:  ";
-            for (int j = 0; j < 24; j++) {
-                comp << setw(3) << orig.dc_coeffs[j] << " ";
-            }
-            comp << "\n";
-            
-            comp << "Encrypted: ";
-            for (int j = 0; j < 24; j++) {
-                comp << setw(3) << encr.dc_coeffs[j] << " ";
-            }
-            comp << "\n\n";
+        if (encrypted_dc.empty()) {
+            cerr << "Error: Could not read encrypted DC metadata\n";
+            return 1;
         }
-        comp.close();
-        cout << "[✓] Saved comparison to: " << original_file << "_dc_comparison.txt\n";
+
+        cout << "[✓] Extracted " << encrypted_dc.size() << " encrypted NALU DC values\n\n";
+
+        // Print encrypted DC coefficients
+        string output_encrypted = encrypted_file + "_dc_encrypted.txt";
+        print_dc_coefficients(encrypted_dc, output_encrypted);
+
+        // Print comparison
+        string output_comparison = original_file + "_dc_comparison.txt";
+        print_dc_comparison(original_dc, encrypted_dc, output_comparison);
     }
 
     cout << "\n[DONE] DC extraction complete\n";

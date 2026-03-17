@@ -44,6 +44,8 @@ int main(int argc, char* argv[]) {
 
     std::vector<uint8_t> nalu;
     std::vector<NALUMetadata> nalu_metadata;
+    std::vector<std::vector<int>> all_dc_original;  // DC values BEFORE encryption
+    std::vector<std::vector<int>> all_dc_encrypted;  // DC values AFTER encryption
     int nalu_count = 0;
 
     std::cout << "[1/5] Reading NALUs\n";
@@ -63,6 +65,10 @@ int main(int argc, char* argv[]) {
                 if (nalu.size() > 8) {
                     std::vector<uint8_t> prev_nalu(nalu.begin(), nalu.end() - 4);
                     
+                    // Extract DC values BEFORE encryption from original NALU
+                    std::vector<int> dc_before = extract_dc_values_from_nalu(prev_nalu);
+                    all_dc_original.push_back(dc_before);
+                    
                     nalu.clear();
                     nalu.push_back(0x00);
                     nalu.push_back(0x00);
@@ -79,6 +85,10 @@ int main(int argc, char* argv[]) {
 
                     // Perform actual DC coefficient encryption
                     std::vector<uint8_t> encrypted_nalu = encrypt_dc_coefficients(prev_nalu, key_bytes);
+                    
+                    // Extract DC values AFTER encryption from encrypted NALU
+                    std::vector<int> dc_after = extract_dc_values_from_nalu(encrypted_nalu);
+                    all_dc_encrypted.push_back(dc_after);
 
                     uint32_t encrypted_size = encrypted_nalu.size();
 
@@ -103,7 +113,16 @@ int main(int argc, char* argv[]) {
         uint32_t original_size = nalu.size();
         uint8_t nalu_type = (nalu[4] & 0x1F);
 
+        // Extract DC values BEFORE encryption from original NALU
+        std::vector<int> dc_before = extract_dc_values_from_nalu(nalu);
+        all_dc_original.push_back(dc_before);
+
         std::vector<uint8_t> encrypted_nalu = encrypt_dc_coefficients(nalu, key_bytes);
+        
+        // Extract DC values AFTER encryption from encrypted NALU
+        std::vector<int> dc_after = extract_dc_values_from_nalu(encrypted_nalu);
+        all_dc_encrypted.push_back(dc_after);
+        
         output.write((char*)encrypted_nalu.data(), encrypted_nalu.size());
 
         NALUMetadata meta;
@@ -133,6 +152,16 @@ int main(int argc, char* argv[]) {
     metadata.write((char*)meta_footer, 4);
 
     std::cout << "[3/5] Processed NALUs: " << nalu_count << "\n";
+    
+    // Save DC values to metadata files
+    std::string dc_original_file = std::string(argv[1]) + ".dc";
+    save_dc_values_to_file(dc_original_file, all_dc_original);
+    std::cout << "[3.5/5] Saved original DC values to: " << dc_original_file << "\n";
+    
+    std::string dc_encrypted_file = std::string(argv[2]) + ".dc";
+    save_dc_values_to_file(dc_encrypted_file, all_dc_encrypted);
+    std::cout << "[3.6/5] Saved encrypted DC values to: " << dc_encrypted_file << "\n";
+    
     std::cout << "[4/5] Wrote encrypted file: " << argv[2] << "\n";
     std::cout << "[5/5] Wrote metadata file: " << metadata_file << "\n\n";
     

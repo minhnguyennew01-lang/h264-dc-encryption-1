@@ -1,5 +1,7 @@
 #include "encryption.h"
 #include <cstring>
+#include <iostream>
+#include <fstream>
 
 using namespace std;
 
@@ -119,6 +121,64 @@ std::vector<uint8_t> decrypt_dc_coefficients(
 ) {
     // XOR is symmetric: decryption is same as encryption
     return encrypt_dc_coefficients(nalu, key);
+}
+
+// Extract DC values from NALU (simplified: extract from byte positions)
+std::vector<int> extract_dc_values_from_nalu(
+    const std::vector<uint8_t>& nalu
+) {
+    std::vector<int> dc_values;
+    
+    // Simplified extraction: treat bytes every 16 bytes as DC samples
+    // 24 DC per NALU: 16 LUMA + 4 CB + 4 CR
+    // Each DC is one byte in our simplified model
+    
+    for (int i = 4; i < static_cast<int>(nalu.size()) && dc_values.size() < 24; i += 16) {
+        if (i < static_cast<int>(nalu.size())) {
+            dc_values.push_back(static_cast<int>(nalu[i]));
+        }
+        if (i + 1 < static_cast<int>(nalu.size()) && dc_values.size() < 24) {
+            dc_values.push_back(static_cast<int>(nalu[i + 1]));
+        }
+    }
+    
+    // Pad with zeros if needed
+    while (dc_values.size() < 24) {
+        dc_values.push_back(0);
+    }
+    
+    // Trim to exactly 24
+    if (dc_values.size() > 24) {
+        dc_values.resize(24);
+    }
+    
+    return dc_values;
+}
+
+// Save DC values to metadata file
+void save_dc_values_to_file(
+    const std::string& filename,
+    const std::vector<std::vector<int>>& all_dc_values
+) {
+    std::ofstream file(filename);
+    if (!file) {
+        std::cerr << "Error: Cannot create DC metadata file: " << filename << "\n";
+        return;
+    }
+    
+    for (size_t nalu_idx = 0; nalu_idx < all_dc_values.size(); nalu_idx++) {
+        const auto& dc_vals = all_dc_values[nalu_idx];
+        
+        // Format: NALU_INDEX|DC0 DC1 DC2 ... DC23
+        file << nalu_idx << "|";
+        for (size_t i = 0; i < dc_vals.size(); i++) {
+            if (i > 0) file << " ";
+            file << dc_vals[i];
+        }
+        file << "\n";
+    }
+    
+    file.close();
 }
 
 

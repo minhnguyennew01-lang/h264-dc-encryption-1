@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <string>
 
 class Encryption {
 public:
@@ -27,4 +28,15 @@ std::vector<uint8_t> encrypt_dc_coefficients(
 std::vector<uint8_t> decrypt_dc_coefficients(
     const std::vector<uint8_t>& nalu,
     const std::vector<uint8_t>& key
+);
+
+// Extract DC values from NALU (before encryption) for storage
+std::vector<int> extract_dc_values_from_nalu(
+    const std::vector<uint8_t>& nalu
+);
+
+// Save DC values to metadata file
+void save_dc_values_to_file(
+    const std::string& filename,
+    const std::vector<std::vector<int>>& all_dc_values
 );
