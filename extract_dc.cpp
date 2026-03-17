@@ -73,10 +73,8 @@ void print_dc_coefficients(const vector<DCData>& dc_data, const string& output_f
     out << "Total NALUs: " << dc_data.size() << "\n";
     out << "DC per NALU: 24 (16 LUMA + 4 CB + 4 CR)\n\n";
 
-    // Print first 100 NALUs in detail
-    int print_count = min(100, (int)dc_data.size());
-
-    for (int i = 0; i < print_count; i++) {
+    // Print all NALUs
+    for (int i = 0; i < (int)dc_data.size(); i++) {
         const auto& data = dc_data[i];
         out << "═══════════════════════════════════════════════════════════════════\n";
         out << "NALU #" << data.nalu_index << "\n";
@@ -99,10 +97,6 @@ void print_dc_coefficients(const vector<DCData>& dc_data, const string& output_f
             out << setw(4) << data.dc_coeffs[j] << " ";
         }
         out << "\n\n";
-    }
-
-    if (dc_data.size() > print_count) {
-        out << "... (remaining " << (dc_data.size() - print_count) << " NALUs omitted)\n";
     }
 
     out.close();
