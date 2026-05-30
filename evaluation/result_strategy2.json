@@ -1,0 +1,28 @@
+{
+  "strategy_num": "2",
+  "encrypted": "/home/minh/Documents/NCKH20262/bitstream_impl_arnold2d/output.h264.s2_hybrid",
+  "encrypted_meta": "/home/minh/Documents/NCKH20262/bitstream_impl_arnold2d/output.h264.s2_hybrid.meta",
+  "decrypted": "/home/minh/Documents/NCKH20262/bitstream_impl_arnold2d/output.h264.s2_hybrid.decrypted",
+  "encrypt_time_ms": 919.4600582122803,
+  "decrypt_time_ms": 987.2283935546875,
+  "total_time_ms": 1906.6884517669678,
+  "original_size": 228618587,
+  "encrypted_size": 228618587,
+  "decrypted_size": 228618587,
+  "size_overhead_pct": 0.0,
+  "validation_status": "PASS",
+  "validation_detail": "MD5 byte-perfect match",
+  "md5_original": "843369253a9f3ff8c91d118ff389cd94",
+  "md5_decrypted": "843369253a9f3ff8c91d118ff389cd94",
+  "quality_metrics": {
+    "ssim": 1.0,
+    "psnr": Infinity,
+    "perfect": true,
+    "samples_tested": 2,
+    "frames_sampled": [
+      0,
+      100,
+      1000
+    ]
+  }
+}

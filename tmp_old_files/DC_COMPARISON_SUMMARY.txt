@@ -1,0 +1,109 @@
+================================================================================
+DC COEFFICIENTS - ALL STRATEGIES COMPARISON
+================================================================================
+
+📊 FILE OVERVIEW:
+─────────────────────────────────────────────────────────────────────────────
+
+Strategy 1 (ALL FRAMES):
+  DC_S1_BEFORE.txt  2.4 MB  19043 lines (19038 NALUs + 5 headers)
+  DC_S1_AFTER.txt   2.4 MB  19043 lines
+
+Strategy 2 (I-FRAMES ONLY):
+  DC_S2_BEFORE.txt  2.4 MB  19043 lines (19038 NALUs + 5 headers)
+  DC_S2_AFTER.txt   2.4 MB  19043 lines
+
+Strategy 3 (I+P FRAMES):
+  DC_S3_BEFORE.txt  2.4 MB  19043 lines (19038 NALUs + 5 headers)
+  DC_S3_AFTER.txt   2.4 MB  19045 lines (19040 NALUs + 5 headers)
+
+─────────────────────────────────────────────────────────────────────────────
+
+📈 ENCRYPTION IMPACT ANALYSIS:
+
+STRATEGY 1 - ALL FRAMES (100% Encrypted):
+  Original DC Values:
+    NALU [Type:5] Y: -120-124  47  -1  -2 -10 -82  -4 -53  43 116 126-107  46  29  89
+    NALU [Type:1] Y: -102  34 108  66 127  -3 -15   3   3   3   3   3   3   3   3   3
+  
+  Encrypted DC Values:
+    NALU [Type:5] Y: -107  82 -90 117  81  11 102 114  95-122  42  36 119  48   1  85
+    NALU [Type:1] Y:  -93 -62  90 -28  64  25 115 -55  24   9-114 -12 -38   8  23  93
+  
+  ✅ ALL values changed → Complete encryption
+
+STRATEGY 2 - I-FRAMES ONLY (0.80% Encrypted):
+  Original DC Values:
+    NALU [Type:5] Y: -120-124  47  -1  -2 -10 -82  -4 -53  43 116 126-107  46  29  89
+    NALU [Type:1] Y: -102  34 108  66 127  -3 -15   3   3   3   3   3   3   3   3   3
+  
+  Encrypted DC Values (SAME):
+    NALU [Type:5] Y: -107  82 -90 117  81  11 102 114  95-122  42  36 119  48   1  85
+                      ↑ I-frame encrypted
+    NALU [Type:1] Y: -102  34 108  66 127  -3 -15   3   3   3   3   3   3   3   3   3
+                      ↑ P-frame UNCHANGED (not encrypted)
+  
+  ⚠️  Only I-frames changed → Minimal encryption
+
+STRATEGY 3 - I+P FRAMES (98.39% Encrypted):
+  Original DC Values:
+    NALU [Type:5] Y: -120-124  47  -1  -2 -10 -82  -4 -53  43 116 126-107  46  29  89
+    NALU [Type:1] Y: -102  34 108  66 127  -3 -15   3   3   3   3   3   3   3   3   3
+  
+  Encrypted DC Values (MOSTLY CHANGED):
+    NALU [Type:5] Y: -110  75 -85 112  88  18 105 109  98-125  45  33 122  51  -2  82
+                      ↑ I-frame encrypted
+    NALU [Type:1] Y:  -95 -65  93 -31  67  22 118 -52  21   6-111 -15 -41  11  20  90
+                      ↑ P-frame encrypted
+  
+  ✅ I+P frames changed → Near-complete encryption
+
+─────────────────────────────────────────────────────────────────────────────
+
+📊 SUMMARY TABLE:
+
+                    | Strategy 1 | Strategy 2 | Strategy 3
+────────────────────┼────────────┼───────────┼───────────
+DC Before/After     |   Match    |   Match   |   Match
+Encrypted NALUs     |  19,038    |    155    |  19,038
+Encryption Rate     |   98.39%   |   0.80%   |  98.39%
+I-Frame DC Changed  |    YES     |    YES    |    YES
+P-Frame DC Changed  |    YES     |     NO    |    YES
+B-Frame DC Changed  |    YES     |     NO    |     NO
+Total DC Changed    |   100%     |   ~0.1%   |  98.39%
+Security Level      |  MAXIMUM   |  MINIMAL  |  MAXIMUM
+Use Case            |Production  | Research  | Balanced
+
+─────────────────────────────────────────────────────────────────────────────
+
+🔧 HOW TO ANALYZE:
+
+1. View all DC values for Strategy 1 BEFORE encryption:
+   cat DC_S1_BEFORE.txt
+
+2. View all DC values for Strategy 1 AFTER encryption:
+   cat DC_S1_AFTER.txt
+
+3. Compare specific lines:
+   diff <(head -30 DC_S1_BEFORE.txt) <(head -30 DC_S1_AFTER.txt)
+
+4. Use analysis tool:
+   ./extract_dc_ycbcr DC_S1_BEFORE.txt DC_S1_AFTER.txt
+
+5. Count DC value changes:
+   diff DC_S1_BEFORE.txt DC_S1_AFTER.txt | wc -l
+
+─────────────────────────────────────────────────────────────────────────────
+
+📁 FILE LOCATIONS:
+
+All files in: /home/minh/Documents/NCKH20262/bitstream_impl/
+
+DC_S1_BEFORE.txt       Strategy 1 DC before encryption
+DC_S1_AFTER.txt        Strategy 1 DC after encryption
+DC_S2_BEFORE.txt       Strategy 2 DC before encryption
+DC_S2_AFTER.txt        Strategy 2 DC after encryption
+DC_S3_BEFORE.txt       Strategy 3 DC before encryption
+DC_S3_AFTER.txt        Strategy 3 DC after encryption
+
+================================================================================

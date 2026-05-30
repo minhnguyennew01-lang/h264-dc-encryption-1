@@ -1,0 +1,53 @@
+================================================================================
+TẠI SAO 3 STRATEGIES CÓ DC AFTER KHÁC NHAU?
+================================================================================
+
+📊 SO SÁNH NALU TYPE:5 ĐẦU TIÊN:
+
+ORIGINAL (DC_BEFORE - cả 3 giống nhau):
+  Y: -120-124  47  -1  -2 -10 -82  -4 -53  43 116 126-107  46  29  89
+  Cb:  123 -77  81 -14
+  Cr:  -24  73 114  -3
+
+STRATEGY 1 (ALL FRAMES) - DC AFTER:
+  Y: -107  82 -90 117  81  11 102 114  95-122  42  36 119  48   1  85
+  Cb:  -78 -11-111 -49
+  Cr:  -87 109  70 -35
+
+STRATEGY 2 (I-FRAMES ONLY) - DC AFTER:
+  Y:  -84-102-117  61 111 -94  67  18 -65  50 -92-111-108-105  80 126
+  Cb:  -38  60  78 -45
+  Cr:   24  24 -99  45
+
+STRATEGY 3 (I+P FRAMES) - DC AFTER:
+  Y:  -84-102-117  61 111 -94  67  18 -65  50 -92-111-108-105  80 126
+  Cb:  -38  60  78 -45
+  Cr:   24  24 -99  45
+
+📌 QUAN SÁT:
+  1. Strategy 2 và 3 GIỐNG NHAU (cả 2 có I-frame encryption)
+  2. Strategy 1 KHÁC (cũng có I-frame encryption)
+  
+  ❌ TẠI SAO KHÁC?
+
+🔍 NGUYÊN NHÂN KHÁC NHAU:
+
+Vì mỗi lần chạy encryption, keystream được tạo từ:
+  - Key: "mykey123"  ← GIỐNG
+  - NALU index:  0   ← GIỐNG
+  - ⚠️ NHƯNG: Trong mỗi lần chạy, PLCM keystream khác nhau!
+
+CÓ THỂ LÀ:
+  1️⃣ PLCM không deterministic (có random/time seed?)
+  2️⃣ Keystream generator khác nhau giữa các test run
+  3️⃣ Mỗi lần compile/chạy, kết quả khác nhau
+
+🔧 KIỂM TRA:
+
+Để xác nhận, cần:
+  1. Chạy lại cùng 1 strategy 2 lần với cùng key
+  2. Xem DC_AFTER có giống nhau không
+  3. Nếu khác → Keystream không deterministic
+  4. Nếu giống → Có lý do gì khác
+
+================================================================================

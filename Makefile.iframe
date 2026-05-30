@@ -1,0 +1,38 @@
+#!/bin/bash
+# Makefile for extract_iframe_from_h264
+
+CXX = g++
+CXXFLAGS = -std=c++11 -Wall -O2
+LDFLAGS = -lavformat -lavcodec -lavutil -lswscale -lpng
+
+# Target
+TARGET = extract_iframe_from_h264
+
+# Source files
+SOURCES = extract_iframe_from_h264.cpp
+
+# Object files
+OBJECTS = $(SOURCES:.cpp=.o)
+
+# Default rule
+all: $(TARGET)
+
+# Link
+$(TARGET): $(OBJECTS)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
+	@echo "✅ Compiled: $@"
+
+# Compile
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# Clean
+clean:
+	rm -f $(OBJECTS) $(TARGET)
+	@echo "🧹 Cleaned"
+
+# Run example
+test: $(TARGET)
+	@echo "Usage: ./$(TARGET) <input.h264> <output.png> [--iframe-num N] [--list]"
+
+.PHONY: all clean test
