@@ -19,9 +19,21 @@ int main(int argc, char* argv[]) {
     }
 
     string input_file = argv[1];
-    string cmd = string("timeout 300 /tmp/h264bitstream/.builddir/h264_analyze ") + 
-                 input_file + " 2>&1";
     
+    // Get h264_analyze binary path from environment or use default
+    // (set by extract_nalu_from_h264analyze_wrapper.sh)
+    const char* h264_bin_env = getenv("H264_ANALYZE_BIN");
+    string h264_bin = h264_bin_env ? string(h264_bin_env) : "./third_party/h264bitstream/.libs/h264_analyze";
+    
+    // Build command with proper LD_LIBRARY_PATH
+    string cmd = string("export LD_LIBRARY_PATH=./third_party/h264bitstream/.libs:/usr/local/lib:$LD_LIBRARY_PATH && ") +
+                 "timeout 300 " + h264_bin + " " + input_file + " 2>&1";
+    
+    // DEBUG: print the command being executed when env var EXTRACT_DEBUG is set
+    const char* debug_env = getenv("EXTRACT_DEBUG");
+    if (debug_env && string(debug_env) == "1") {
+        cerr << "DEBUG: running cmd: " << cmd << "\n";
+    }
     FILE* pipe = popen(cmd.c_str(), "r");
     if (!pipe) {
         cerr << "Error running h264_analyze\n";
