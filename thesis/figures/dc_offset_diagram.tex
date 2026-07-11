@@ -1,0 +1,32 @@
+%% TikZ: DC offset diagram — byte layout trong NALU VCL
+\begin{tikzpicture}[
+  box/.style={draw, minimum height=0.7cm, font=\small},
+  header/.style={box, fill=gray!20, minimum width=1.8cm},
+  dc/.style={box, fill=orange!40, minimum width=3.5cm},
+  rest/.style={box, fill=blue!10, minimum width=2.5cm},
+  startcode/.style={box, fill=red!15, minimum width=1.6cm},
+]
+
+%% Row 1: byte layout
+\node[startcode] (sc) at (0,0) {Start code\\(4 B)};
+\node[header, right=0pt of sc] (nh) {NAL header\\(1 B)};
+\node[header, right=0pt of nh] (hdr) {Header\\bytes 1–18\\(18 B)};
+\node[dc, right=0pt of hdr] (dc) {\textbf{DC bytes}\\offset 19–43\\(25 B)};
+\node[rest, right=0pt of dc] (rest) {Remaining\\payload\\($\ldots$)};
+
+%% Annotations below
+\draw[<->, thick, orange!70!black]
+  ([yshift=-0.15cm]dc.south west) -- ([yshift=-0.15cm]dc.south east)
+  node[midway, below, font=\footnotesize] {\texttt{DC\_OFFSET=19, DC\_SIZE=25}};
+
+\draw[dashed, gray]
+  (sc.north west) -- ++(0, 0.5) node[above, font=\tiny] {nal\_pos};
+\draw[dashed, orange!70!black]
+  (dc.north west) -- ++(0, 0.5) node[above, font=\tiny] {nal\_pos+19};
+\draw[dashed, orange!70!black]
+  (dc.north east) -- ++(0, 0.5) node[above, font=\tiny] {nal\_pos+43};
+
+%% Label
+\node[above=0.8cm of hdr, font=\small\itshape] {NAL Unit VCL (Type 1 / Type 5)};
+
+\end{tikzpicture}

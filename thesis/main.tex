@@ -1,0 +1,203 @@
+\documentclass{thesis}
+\usepackage[utf8]{inputenc}
+\usepackage[T5]{fontenc}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{mathptmx}
+\usepackage{geometry}
+\usepackage{xcolor}
+\usepackage[fontsize=13pt]{scrextend}
+\usepackage{indentfirst}
+\usepackage{cite}
+\usepackage{graphicx,subfigure}
+\usepackage{amssymb,amsmath}
+\usepackage{algorithm}
+\usepackage{algorithmicx}
+\usepackage{algpseudocode}
+\usepackage{pifont}
+\usepackage{float}
+\usepackage[draft]{todonotes}
+\usepackage{xargs}
+\usepackage{comment}
+\usepackage{color}
+\usepackage{flushend}
+
+%% --- Packages bổ sung cho nội dung thesis ---
+\usepackage{booktabs}          % \toprule, \midrule, \bottomrule
+\usepackage{threeparttable}    % \begin{tablenotes}
+\usepackage{multirow}
+\usepackage{makecell}
+\usepackage{listings}          % code listing (C++, bash)
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, calc}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  keywordstyle=\color{blue!70!black},
+  commentstyle=\color{green!50!black},
+  stringstyle=\color{red!60!black},
+  showstringspaces=false,
+}
+
+\newcommand{\eoproof}{\hfill $\square$}
+\newtheorem{theorem}{\bf Theorem}[section]
+\newtheorem{definition}{\bf Definition}[section]
+\clearpage
+
+
+%% START DOCUMENT
+\begin{document}
+
+%% ================================================================
+%%  TRANG BÌA
+%% ================================================================
+\begin{center}
+    \vspace{12pt}
+        \textbf{\fontsize{15pt}{0pt} \selectfont{} ĐẠI HỌC BÁCH KHOA HÀ NỘI \\ \vspace{3pt} TRƯỜNG ĐIỆN - ĐIỆN TỬ}
+    \vspace{0.5cm}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=2cm,height=3cm]{logoBK.png}
+\end{figure}
+
+\vspace{48pt}
+        \fontsize{25pt}{0pt}\selectfont{} \textbf{ĐỒ ÁN TỐT NGHIỆP}
+\vspace{24pt}
+
+        \textbf{\fontsize{17pt}{0pt}\selectfont{} Hệ thống mã hoá video chuẩn H.264 ứng dụng thuật toán mã hoá hỗn loạn đa chiều triển khai trên FPGA}
+    \vspace{18pt}
+
+        \fontsize{14pt}{0pt}\selectfont{} \textbf{NGUYỄN Hoàng Minh}
+    \vspace{3pt}
+
+        \fontsize{14pt}{0pt}\selectfont{} minh.nh223724@sis.hust.edu.vn
+    \vspace{12pt}
+
+        \fontsize{14pt}{0pt}\selectfont{} \textbf{Ngành Kỹ thuật Điện tử Viễn thông}
+\end{center}
+
+\begin{table}[H]
+    \centering
+        \begin{tabular}{l l c}
+            \textbf{Giảng viên hướng dẫn:}    &  TS. Tạ Thị Kim Huệ \vspace{6pt} &  \\
+            &\vspace{3pt} & \fontsize{10pt}{0pt}\selectfont{} Chữ ký của GVHD \\
+            \textbf{Khoa:} & Điện tử \vspace{3pt}\\
+            \textbf{Trường:} & Điện - Điện tử
+        \end{tabular}
+\end{table}
+
+\begin{center}
+    \vspace{48pt}
+    \fontsize{14pt}{0pt}\selectfont{} Hà Nội, 06/2026
+\end{center}
+
+\thispagestyle{empty}
+    \newpage
+        \clearpage
+            \thispagestyle{empty}
+                \cleardoublepage
+
+%% ================================================================
+%%  LỜI CAM ĐOAN
+%% ================================================================
+\section*{LỜI CAM ĐOAN}
+    \thispagestyle{empty}
+Em là Nguyễn Hoàng Minh, sinh viên lớp ET-TN K67. Em xin cam đoan nội dung trình bày trong đồ án ``Hệ thống mã hoá video chuẩn H.264 ứng dụng thuật toán mã hoá hỗn loạn đa chiều triển khai trên FPGA'' theo sự hướng dẫn của TS Tạ Thị Kim Huệ là kết quả trong quá trình nghiên cứu của em. Các kết quả đưa ra là trung thực và thực tế. Các thông tin, tài liệu tham khảo được trích dẫn đều tuân thủ các quy định về quyền sở hữu trí tuệ, các tài liệu được chú thích, liệt kê đầy đủ. Em xin chịu trách nhiệm với những nội dung được trình bày trong đồ án này.
+
+\vspace{6pt}
+    \hspace{7cm}Hà Nội, ngày 26 tháng 06 năm 2026
+
+        \hspace{8.6cm} Sinh viên thực hiện
+
+\vspace{2cm}
+    \hspace{8.6cm}\textbf{Nguyễn Hoàng Minh}
+
+\thispagestyle{empty}
+    \newpage
+        \clearpage
+            \thispagestyle{empty}
+                \cleardoublepage
+
+%% ================================================================
+%%  LỜI CẢM ƠN
+%% ================================================================
+\newpage
+\section*{LỜI CẢM ƠN}
+    \thispagestyle{empty}
+Đầu tiên, em xin cảm ơn tiến sỹ Tạ Thị Kim Huệ, người đã tận tình hướng dẫn em trong suốt quá trình thực hiện đồ án này rất nhiều. Cảm ơn cô vì đã luôn đồng hành cùng em từ những năm tháng đầu tiên của đại học, khi em chỉ là cô sinh viên không biết gì về những kiến thức mật mã, bảo mật; đến ngày em có thể tham gia nghiên cứu khoa học, viết bài và đứng trình bày kết quả trên các hội nghị. Cảm ơn tất cả những thành viên trong lab đã luôn hỗ trợ, động viên em trong suốt gần 3 năm tham gia mặc dù em vẫn còn nhiều thiếu sót.
+
+Em xin chân thành cảm ơn.
+
+\newpage
+    \thispagestyle{empty}
+        \clearpage
+            \thispagestyle{empty}
+                \cleardoublepage
+
+%% ================================================================
+%%  TÓM TẮT
+%% ================================================================
+\section*{TÓM TẮT ĐỒ ÁN}
+    \thispagestyle{empty}
+Đồ án này nghiên cứu và triển khai hệ thống mã hoá chọn lọc các hệ số DC trong luồng bit H.264 mà không cần re-encode video. Phương pháp mã hoá chọn lọc chỉ mã hoá 25 bytes hệ số DC tại offset cố định trong mỗi NAL Unit VCL, cho phép làm suy giảm chất lượng hình ảnh đáng kể (PSNR $\approx$ 7--8 dB) với chi phí tính toán thấp hơn nhiều so với mã hoá toàn bộ bitstream.
+
+Thuật toán lai ghép (hybrid) được đề xuất kết hợp ba tầng: sinh khóa dòng hỗn loạn PLCM (Piecewise Linear Chaotic Map) phụ thuộc chỉ số NALU, hoán vị Arnold 2D Cat Map, và cơ chế khuếch tán chuỗi XOR. Cơ chế khuếch tán chuỗi đảm bảo một bit thay đổi ở đầu vào lan truyền qua toàn bộ 25 bytes ciphertext, đạt NPCR $> 99.6\%$ (chuẩn Wu et al.\ 2011).
+
+Thuật toán được so sánh với ba phương pháp cơ sở: AES-128-CTR, DES-OFB, và RC4, trên hai chiến lược (S1: Type 1 + Type 5; S2: chỉ Type 5). Kết quả thực nghiệm trên file H.264 thực tế (19.348 NALU, 219 MB) cho thấy thuật toán hybrid đạt chỉ số bảo mật tốt nhất (Entropy $\approx$ 8.0 bits/byte, SSIM DC $\approx$ 0), trong khi RC4 nhanh nhất (769 ns/NALU). Tính đúng đắn byte-exact được đảm bảo tuyệt đối (BER = 0, SHA-256 PASS) cho tất cả 8 tổ hợp.
+
+\thispagestyle{empty}
+    \cleardoublepage
+
+%% ================================================================
+%%  MỤC LỤC
+%% ================================================================
+\pagenumbering{roman}
+\tableofcontents
+    \thispagestyle{empty}
+        \newpage
+            \thispagestyle{empty}
+                \cleardoublepage
+
+%% DANH MỤC HÌNH VẼ
+{\let\oldnumberline\numberline
+    \renewcommand{\numberline}{Hình~\oldnumberline}
+        \listoffigures}
+            \phantomsection\addcontentsline{toc}{section}{\numberline{} DANH MỤC HÌNH VẼ}
+\newpage
+
+%% DANH MỤC BẢNG BIỂU
+{\let\oldnumberline\numberline
+    \renewcommand{\numberline}{Bảng~\oldnumberline}
+        \listoftables}
+            \phantomsection\addcontentsline{toc}{section}{\numberline{} DANH MỤC BẢNG BIỂU}
+\newpage
+
+%% ================================================================
+%%  NỘI DUNG CÁC CHƯƠNG
+%% ================================================================
+\pagenumbering{arabic}
+
+\input{chapters/ch1_intro}
+\input{chapters/ch2_theory}
+\input{chapters/ch3_method}
+\input{chapters/ch4_baseline}
+\input{chapters/ch5_experiment}
+\input{chapters/ch6_results}
+\input{chapters/ch7_conclusion}
+
+%% ================================================================
+%%  TÀI LIỆU THAM KHẢO
+%% ================================================================
+\newpage
+\phantomsection
+\addcontentsline{toc}{section}{\numberline{} TÀI LIỆU THAM KHẢO}
+\bibliography{references}
+
+\end{document}

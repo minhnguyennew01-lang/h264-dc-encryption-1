@@ -1,0 +1,55 @@
+%% TikZ: Hybrid algorithm flowchart
+\begin{tikzpicture}[
+  node distance=1.1cm and 1.5cm,
+  block/.style={draw, rectangle, rounded corners=3pt,
+                minimum width=3.2cm, minimum height=0.7cm,
+                text centered, font=\small},
+  io/.style={block, fill=gray!15},
+  proc/.style={block, fill=blue!12},
+  crypto/.style={block, fill=orange!20},
+  diffusion/.style={block, fill=red!15},
+  arrow/.style={->, >=stealth, thick},
+  label/.style={font=\footnotesize\itshape, gray},
+]
+
+%% Input
+\node[io] (key)   {Khóa $K$ + \texttt{nalu\_index} $n$};
+\node[io, below=0.7cm of key] (dc) {DC bytes $d[0..24]$};
+
+%% Step 1: PLCM
+\node[proc, below=0.7cm of dc] (plcm)
+  {PLCM($x_0$, $p$, $n$) → $ks[0..24]$};
+
+%% Step 2: Arnold
+\node[crypto, below=0.9cm of plcm] (arnold)
+  {Arnold 2D ($P=3$, $Q=11$, $N=5$)\\ $d[0..24]$ → $d'[0..24]$};
+
+%% Step 3: XOR + Diffusion
+\node[diffusion, below=0.9cm of arnold] (xor)
+  {Chained XOR:\\ $C[i] = (d'[i] \oplus ks[i]) \oplus C[i-1]$};
+
+%% Output
+\node[io, below=0.8cm of xor] (out) {Ciphertext $C[0..24]$};
+
+%% Self-loop for diffusion feedback
+\draw[arrow, dashed, red!60] (xor.east) -- ++(1.2,0)
+  |- node[right, font=\tiny] {$C[i-1]$} (xor.east |- xor.north);
+
+%% Main arrows
+\draw[arrow] (key) -- (plcm) node[midway, right, label] {dẫn xuất $x_0$, $p$};
+\draw[arrow] (dc)  -- (plcm);
+\draw[arrow] (plcm) -- (arnold) node[midway, right, label] {keystream $ks$};
+\draw[arrow] (dc |- arnold.north) -- (arnold)
+  node[pos=0, right, label] {};
+\draw[arrow] (dc) -- ++(3.5, 0) |- (arnold.east);
+\draw[arrow] (arnold) -- (xor);
+\draw[arrow] (xor) -- (out);
+
+%% Decrypt note
+\node[right=3.8cm of xor, font=\small, align=left, text width=4cm]
+  {\textit{Giải mã (ngược):}\\
+   $d'[0] = C[0] \oplus ks[0]$\\
+   $d'[i] = C[i] \oplus C[i-1] \oplus ks[i]$\\
+   Sau đó Arnold$^{-1}$ → $d$};
+
+\end{tikzpicture}

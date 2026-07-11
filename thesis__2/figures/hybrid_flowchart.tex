@@ -1,0 +1,60 @@
+%% TikZ: Hybrid algorithm flowchart — two-column layout
+%% Left (x=-3.9): Key → PLCM   Right (x=+3.9): DC → Arnold
+%% XOR width=7.8cm → west=-3.9, east=+3.9 → straight vertical arrows
+\begin{tikzpicture}[
+  block/.style={draw, rectangle, rounded corners=4pt,
+                minimum width=3.6cm, minimum height=0.8cm,
+                text centered, font=\small},
+  io/.style={block, fill=gray!15},
+  proc/.style={block, fill=blue!10},
+  crypto/.style={draw, rectangle, rounded corners=4pt,
+                 text width=3.4cm, minimum height=1.2cm,
+                 align=center, font=\small, fill=orange!18},
+  diffusion/.style={draw, rectangle, rounded corners=4pt,
+                    minimum width=7.8cm, minimum height=0.95cm,
+                    text centered, font=\small, fill=red!12},
+  arrow/.style={->, >=stealth, thick},
+  lab/.style={font=\footnotesize\itshape, text=gray!80!black},
+]
+
+%% ── Left branch: Key → PLCM ──────────────────────────────
+\node[io]        (key)    at (-3.9,  0.0) {Khóa $K$ + \texttt{nalu\_index} $n$, vòng $r$};
+\node[proc]      (plcm)   at (-3.9, -2.3) {PLCM$(x_0, p_{n+r}) \to ks[0..24]$};
+
+%% ── Right branch: DC → Arnold ────────────────────────────
+\node[io]        (dc)     at ( 3.9,  0.0) {state$_{r}[0..24]$ (DC bytes vòng $r$)};
+\node[crypto]    (arnold) at ( 3.9, -2.3)
+  {Arnold 2D\\($P{=}3$, $Q{=}11$, $N{=}5$)\\[2pt]$d[0..24] \to d'[0..24]$};
+
+%% ── Center: Diffusion → Ciphertext ──────────────────────
+\node[diffusion] (xor)    at (   0, -4.8)
+  {Diffusion:\quad $C[i] = ks[i] \oplus \bigl((d'[i]{+}ks[i])\bmod 256\bigr) \oplus C[i-1]$};
+\node[io]        (out)    at (   0, -6.4) {Ciphertext $C[0..24]$};
+
+%% ── Arrows ───────────────────────────────────────────────
+\draw[arrow] (key) -- (plcm)
+  node[midway, left, lab] {dẫn xuất $x_0$, $p$};
+\draw[arrow] (dc) -- (arnold);
+
+%% Straight vertical (column centers align with XOR.west / XOR.east)
+\draw[arrow] (plcm.south) -- (xor.west)
+  node[pos=0.5, right, lab] {keystream $ks$};
+\draw[arrow] (arnold.south) -- (xor.east);
+
+\draw[arrow] (xor) -- (out);
+
+%% ── Diffusion feedback C[i] → C[i-1] ────────────────────
+\draw[thick, dashed, red!60]
+  (xor.east) -- ++(0.55, 0) coordinate (fbA);
+\draw[->, >=stealth, thick, dashed, red!60]
+  (fbA) -- (fbA |- xor.north) -- (xor.north east)
+  node[pos=0.25, right, font=\footnotesize, red!80] {$C[i-1]$};
+
+%% ── Decrypt note ─────────────────────────────────────────
+\node[font=\small, align=left, text width=4.0cm] at (7.2, -4.8)
+  {\textit{Giải mã (ngược):}\\[3pt]
+   $t_i = C[i] \oplus ks[i] \oplus C[i-1]$\\
+   $d'[i] = (t_i - ks[i] + 256)\!\bmod 256$\\[1pt]
+   ($C[-1] = seed$; rồi Arnold$^{-1} \to d$)};
+
+\end{tikzpicture}

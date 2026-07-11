@@ -1,0 +1,173 @@
+%% Bảng metrics — trích từ summary_tables_testkey.md (key: testkey, 2026-06-23)
+%% File này được \input từ ch6_results.tex (section counter = 6)
+%% Bảng tự đánh số 6.1, 6.2, ... theo \thetable = \thesection.\arabic{table}
+
+%% ============================================================
+%% Bảng 1: Tổng quan
+%% ============================================================
+\begin{table}[ht]
+\centering
+\caption{Tổng quan thực nghiệm — file output.h264}
+\label{tab:overview}
+\begin{tabular}{|l|l|l|}
+\hline
+ & \textbf{S1 (Type 1 + Type 5)} & \textbf{S2 (Type 5 only)} \\
+\hline
+NALUs mã hoá       & 19{,}037 & 155 \\
+\hline
+Thuật toán         & hybrid, aes, des, rc4 & hybrid, aes, des, rc4 \\
+\hline
+Byte-exact verify  & 8/8 PASS & 8/8 PASS \\
+\hline
+\end{tabular}
+\end{table}
+
+%% ============================================================
+%% Bảng 2: Performance S1
+%% ============================================================
+\begin{table}[ht]
+\centering
+\caption{Hiệu năng — Chiến lược S1 (19{,}037 NALUs, key: testkey)}
+\label{tab:perf_s1}
+\begin{tabular}{|l|r|r|r|r|}
+\hline
+\textbf{Metric} & \textbf{hybrid} & \textbf{aes} & \textbf{des} & \textbf{rc4} \\
+\hline
+Encrypt time (pipeline, s)  & 1.510 & 0.984 & 1.519 & 1.082 \\
+\hline
+DC encrypt time (ms)        & 556.751 & 52.416 & 447.375 & 14.649 \\
+\hline
+DC encrypt / NALU (ns)      & 29{,}245 & 2{,}753 & 23{,}500 & 769 \\
+\hline
+Decrypt time (pipeline, s)  & 1.633 & 1.008 & 8.686$^\dagger$ & 0.949 \\
+\hline
+DC decrypt time (ms)        & 692.768 & 55.970 & 478.312 & 10.925 \\
+\hline
+DC decrypt / NALU (ns)      & 36{,}390 & 2{,}940 & 25{,}125 & 573 \\
+\hline
+\end{tabular}
+\begin{tablenotes}
+\small
+\item $^\dagger$ Pipeline anomaly hệ thống (disk I/O). DC decrypt thực tế = 478 ms, bình thường.
+\end{tablenotes}
+\end{table}
+
+%% ============================================================
+%% Bảng 3: Performance S2
+%% ============================================================
+\begin{table}[ht]
+\centering
+\caption{Hiệu năng — Chiến lược S2 (155 NALUs, key: testkey)}
+\label{tab:perf_s2}
+\begin{tabular}{|l|r|r|r|r|}
+\hline
+\textbf{Metric} & \textbf{hybrid} & \textbf{aes} & \textbf{des} & \textbf{rc4} \\
+\hline
+Encrypt time (pipeline, s)  & 0.990 & 0.837 & 1.109 & 0.960 \\
+\hline
+DC encrypt time (ms)        & 6.659 & 0.477 & 3.475 & 0.112 \\
+\hline
+DC encrypt / NALU (ns)      & 42{,}962 & 3{,}079 & 22{,}417 & 724 \\
+\hline
+DC chiếm \% pipeline encrypt & 0.67\% & 0.057\% & 0.31\% & 0.012\% \\
+\hline
+Decrypt time (pipeline, s)  & 0.937 & 0.873 & 1.051 & 0.907 \\
+\hline
+DC decrypt time (ms)        & 7.215 & 0.475 & 3.640 & 0.081 \\
+\hline
+DC decrypt / NALU (ns)      & 46{,}547 & 3{,}063 & 23{,}484 & 525 \\
+\hline
+\end{tabular}
+\begin{tablenotes}
+\small
+\item Lưu ý: Pipeline time hội tụ (0.84--1.11 s) vì DC $< 1\%$ tổng thời gian;
+I/O đọc/ghi 219 MB chiếm $> 99\%$.
+\end{tablenotes}
+\end{table}
+
+%% ============================================================
+%% Bảng tỉ lệ DC trong pipeline S1
+%% ============================================================
+\begin{table}[ht]
+\centering
+\caption{DC encrypt time chiếm \% pipeline — S1 vs S2}
+\label{tab:dc_percent}
+\begin{tabular}{|l|r|r|}
+\hline
+\textbf{Thuật toán} & \textbf{DC / pipeline S1} & \textbf{DC / pipeline S2} \\
+\hline
+hybrid & 36.9\% & 0.67\% \\
+\hline
+aes    &  5.3\% & 0.057\% \\
+\hline
+des    & 29.5\% & 0.31\% \\
+\hline
+rc4    &  1.35\% & 0.012\% \\
+\hline
+\end{tabular}
+\end{table}
+
+%% ============================================================
+%% Bảng 4: Security
+%% ============================================================
+\begin{table}[ht]
+\centering
+\caption{Chỉ số bảo mật — S1 và S2 (key: testkey)}
+\label{tab:security}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|l|l|r|r|r|r|r|r|r|r|r|}
+\hline
+ & & \multicolumn{4}{c|}{\textbf{S1 (19{,}037 NALUs)}} & & \multicolumn{4}{c|}{\textbf{S2 (155 NALUs)}} \\
+\cline{3-6}\cline{8-11}
+\textbf{Metric} & \textbf{Ngưỡng} & \textbf{hybrid} & \textbf{aes} & \textbf{des} & \textbf{rc4} & & \textbf{hybrid} & \textbf{aes} & \textbf{des} & \textbf{rc4} \\
+\hline
+NPCR plaintext (\%) & $> 99.6$ & 99.5260 & N/A & N/A & N/A & & 99.6903 & N/A & N/A & N/A \\
+\hline
+UACI plaintext (\%) & $\approx 33.46$ & 32.7414 & N/A & N/A & N/A & & 32.4751 & N/A & N/A & N/A \\
+\hline
+Entropy DC (bits/byte) & $> 7.9$ & \textbf{7.9996} & 7.9954 & 7.9948 & 7.9949 & & 7.9534 & 7.9484 & 7.9469 & 7.9508 \\
+\hline
+PSNR DC (dB) & $< 10$ & 7.58 & 7.97 & \textbf{7.30} & 8.03 & & 7.73 & 8.04 & \textbf{7.26} & 7.99 \\
+\hline
+SSIM DC & $\approx 0$ & \textbf{0.0031} & 0.0819 & $-$0.0586 & 0.0895 & & \textbf{0.0184} & 0.0855 & $-$0.0715 & 0.0783 \\
+\hline
+TSSIM DC encrypted & $<$ baseline & \textbf{0.0071} & 0.0238 & 0.0217 & 0.0218 & & \textbf{$-$0.0199} & 0.0164 & 0.0082 & 0.0236 \\
+\hline
+\multicolumn{2}{|l|}{Baseline TSSIM DC (original)} & \multicolumn{4}{c|}{S1 = 0.0163} & & \multicolumn{4}{c|}{S2 = 0.0234} \\
+\hline
+\end{tabular}%
+}
+\begin{tablenotes}
+\small
+\item N/A: không áp dụng cho AES/DES/RC4 (keystream cố định, không có diffusion — xem Chương~\ref{ch:baseline}).
+\end{tablenotes}
+\end{table}
+
+%% ============================================================
+%% Bảng 5: Correctness
+%% ============================================================
+\begin{table}[ht]
+\centering
+\caption{Tính đúng đắn — S1 và S2 (kết quả giống nhau)}
+\label{tab:correctness}
+\begin{tabular}{|l|l|c|c|c|c|}
+\hline
+\textbf{Metric} & \textbf{Ngưỡng} & \textbf{hybrid} & \textbf{aes} & \textbf{des} & \textbf{rc4} \\
+\hline
+BER & $= 0$ & 0 & 0 & 0 & 0 \\
+\hline
+PSNR (original$\to$decrypt, dB) & $= \infty$ & $\infty$ & $\infty$ & $\infty$ & $\infty$ \\
+\hline
+Codec compliance (encrypted) & OK & OK$^*$ & OK$^*$ & OK$^*$ & OK$^*$ \\
+\hline
+Codec compliance (decrypted) & PASS & PASS & PASS & PASS & PASS \\
+\hline
+SHA-256 match & PASS & PASS & PASS & PASS & PASS \\
+\hline
+\end{tabular}
+\begin{tablenotes}
+\small
+\item $^*$ OK + warnings là expected behavior — DC bytes bị mã hoá làm sai H.264 syntax;
+FFmpeg dùng error concealment. File decrypted hoàn toàn sạch (no errors).
+\end{tablenotes}
+\end{table}

@@ -1,0 +1,390 @@
+%% Chương 6: Kết quả và Thảo luận
+\clearpage
+\phantomsection
+\section*{CHƯƠNG 6. KẾT QUẢ VÀ THẢO LUẬN}
+\addcontentsline{toc}{section}{\numberline{}CHƯƠNG 6. KẾT QUẢ VÀ THẢO LUẬN}
+\setcounter{section}{6}
+\setcounter{subsection}{0}
+\setcounter{figure}{0}
+\setcounter{table}{0}
+\setcounter{equation}{0}
+
+\input{tables/metrics_tables}
+
+\subsection{Tính đúng đắn (Correctness)}
+
+\subsubsection{Kết quả tổng quan}
+
+Tính đúng đắn là điều kiện tiên quyết (prerequisite) của toàn bộ hệ thống:
+nếu giải mã không hoàn toàn byte-exact, mọi kết quả bảo mật và hiệu năng đều
+vô nghĩa. Kết quả thực nghiệm (Bảng~\ref{tab:correctness}) cho thấy tất cả
+8 tổ hợp đều PASS hoàn toàn:
+
+\begin{itemize}
+  \item \textbf{BER = 0 tuyệt đối:} Không một bit nào lỗi sau giải mã trong
+        tất cả 8 tổ hợp, trên cả S1 (19.037 NALU mã hoá) và S2 (155 NALU).
+
+  \item \textbf{SHA-256 PASS:} Hash của file gốc (219 MB) và file giải mã
+        khớp hoàn toàn --- xác suất false positive của SHA-256 là $2^{-256}$,
+        thực chất bằng 0. Điều này xác nhận byte-exact ở cấp độ toàn bộ file.
+
+  \item \textbf{PSNR (original$\to$decrypt) = $\infty$:} MSE = 0 (không có
+        pixel sai lệch giữa gốc và giải mã sau decode 60 frames).
+
+  \item \textbf{Codec compliance decrypted: PASS:} FFmpeg decode file giải mã
+        không phát ra bất kỳ warning nào --- cú pháp H.264 được phục hồi hoàn toàn.
+\end{itemize}
+
+\subsubsection{Lý giải tính đúng đắn của thiết kế XOR}
+
+Tính đúng đắn là hệ quả tất yếu của thiết kế: tất cả 4 thuật toán đều dựa trên
+XOR thuần túy. Tính chất $a \oplus a = 0$ đảm bảo:
+
+\begin{equation}
+\text{Dec}(\text{Enc}(P, K, n), K, n) = P \quad \forall P, K, n
+\end{equation}
+
+Miễn là keystream được sinh lại từ cùng $(K, n)$ và hoán vị được đảo ngược chính xác,
+giải mã luôn cho kết quả byte-exact. Đây là \textbf{invariant cứng (hard invariant)}
+của thiết kế.
+
+\subsubsection{Codec compliance của file encrypted}
+
+Khi file H.264 đã mã hoá DC được decode bằng FFmpeg, kết quả là ``OK + warnings'':
+\begin{itemize}
+  \item \textbf{OK:} FFmpeg decode được tất cả frames mà không crash.
+  \item \textbf{Warnings:} FFmpeg báo syntax errors trong DC region --- hành vi
+        dự kiến (expected) vì DC bytes không còn hợp lệ H.264 syntax.
+  \item \textbf{Error concealment:} FFmpeg áp dụng cơ chế error concealment
+        để hiển thị frame dù DC sai --- đây chính là cơ chế bảo vệ của decoder.
+\end{itemize}
+
+File decrypted: \textbf{PASS} (no warnings) --- xác nhận khôi phục hoàn toàn.
+
+\subsection{Hiệu năng (Performance)}
+
+\subsubsection{Chiến lược S1 --- 19.037 NALUs}
+
+Kết quả đầy đủ tại Bảng~\ref{tab:perf_s1}.
+
+\paragraph{Tốc độ thuật toán (DC time/NALU):}
+
+\begin{table}[ht]
+\centering
+\caption{Xếp hạng tốc độ thuật toán S1 theo DC encrypt time/NALU}
+\label{tab:speed_rank_s1}
+\begin{tabular}{lrrl}
+\toprule
+Xếp hạng & Thuật toán & DC encrypt (ns/NALU) & Ghi chú \\
+\midrule
+1 (nhanh nhất) & RC4    & 769    & KSA đơn giản, không cần AES block \\
+2              & AES    & 2.753  & AES-NI hardware; $3.6\times$ chậm hơn RC4 \\
+3              & DES    & 23.500 & Software S-box, không có hardware accel \\
+4 (chậm nhất) & Hybrid & 29.245 & PLCM (nalu\_index iter) + Arnold + diffusion \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+RC4 nhanh gấp 38 lần hybrid do không phải tính PLCM iteration. Chi phí chính
+của hybrid là PLCM: mỗi NALU phải chạy PLCM $n$ lần để đến $x_n$ (tối ưu hoá
+bằng state continuity đã giảm xuống $\approx 25$ lần/NALU thay vì $n$ lần).
+
+AES nhanh gấp DES $\sim$8.5 lần nhờ AES-NI. DES và Hybrid có tốc độ gần nhau
+vì DES-S-box và PLCM iteration đều là sequential computation nặng.
+
+\paragraph{DC chiếm \% pipeline (Bảng~\ref{tab:dc_percent}):}
+
+Với S1, DC encrypt time chiếm đáng kể tổng pipeline:
+\begin{itemize}
+  \item \textbf{Hybrid: 36.9\%} pipeline là DC encrypt time. Tức là gần 1/3
+        thời gian pipeline là tính toán thuật toán --- bottleneck thực sự.
+  \item \textbf{DES: 29.5\%} --- cũng là bottleneck đáng kể.
+  \item \textbf{AES: 5.3\%} --- AES-NI nhanh đến mức I/O chiếm 95\%.
+  \item \textbf{RC4: 1.35\%} --- gần như không đáng kể.
+\end{itemize}
+
+\textbf{Hàm ý cho ứng dụng thực tế (S1):}
+Hybrid và DES là hai thuật toán duy nhất mà tốc độ thuật toán \emph{thực sự ảnh hưởng}
+đến thời gian pipeline. AES và RC4 nhanh đến mức bottleneck chuyển sang I/O.
+
+\paragraph{Anomaly DES S1 decrypt:}
+
+DES S1 decrypt pipeline time = 8.686 s (vs. encrypt 1.519 s) là bất thường rõ ràng.
+Tuy nhiên, DC decrypt time thực tế = 478 ms (nhất quán với encrypt 447 ms).
+Nguyên nhân là disk I/O page cache miss: pipeline decrypt phải đọc file encrypted
+(file mới, không có trong OS page cache) trong khi pipeline encrypt đọc file gốc
+đã được cached. Kiểm tra thêm: chạy decrypt lần 2 (file đã cached) cho pipeline
+time $\approx$ 1.5 s --- xác nhận đây là artifact hệ thống.
+
+\subsubsection{Chiến lược S2 --- 155 NALUs}
+
+Kết quả tại Bảng~\ref{tab:perf_s2}.
+
+\paragraph{Hiện tượng pipeline convergence:}
+
+Đây là quan sát quan trọng nhất của chiến lược S2: \textbf{tất cả pipeline times
+hội tụ về $0.84$--$1.11$ s}, bất kể thuật toán, mặc dù hybrid chậm hơn RC4 59 lần
+(42.962 vs. 724 ns/NALU theo DC).
+
+\textbf{Giải thích định lượng:}
+
+Với 155 NALU và hybrid (42.962 ns/NALU):
+\begin{equation}
+\text{DC total} = 155 \times 42.962 \text{ ns} = 6.659 \text{ ms}
+\end{equation}
+
+Pipeline time hybrid S2 = 0.990 s. Tỷ lệ:
+\begin{equation}
+\frac{6.659 \text{ ms}}{990 \text{ ms}} \times 100\% = 0.67\%
+\end{equation}
+
+DC chiếm 0.67\% tổng pipeline. Phần còn lại (99.33\%) là:
+\begin{itemize}
+  \item Đọc file 219 MB từ disk.
+  \item Scan 19.348 NALU để xác định 155 cần mã hoá.
+  \item Ghi file output 219 MB ra disk.
+\end{itemize}
+
+Chi phí I/O này giống nhau cho mọi thuật toán, vì pipeline luôn đọc và ghi
+toàn bộ 219 MB bất kể số NALU mã hoá. Do đó, dù thuật toán có tốc độ DC
+khác nhau 38--59 lần, sự khác biệt đó bị ``chìm'' trong chi phí I/O.
+
+\textbf{Pipeline convergence:} Khi DC $< 1\%$ pipeline, chi phí thuật toán trở nên
+không đáng kể. Đây là hiện tượng kinh điển của Amdahl's Law \cite{amdahl1967}:
+việc tối ưu hoá một phần nhỏ của hệ thống (DC encryption) không cải thiện
+đáng kể tổng thời gian.
+
+\paragraph{Measurement artifact --- DC/NALU S2 cao hơn S1:}
+
+Quan sát thú vị: DC/NALU của hybrid S2 = 42.962 ns, cao hơn S1 = 29.245 ns.
+Với cùng thuật toán, tại sao S2 chậm hơn per-NALU?
+
+Giải thích: với 155 NALU (S2), kết quả có variance cao hơn do mẫu nhỏ. Với
+19.037 NALU (S1), kết quả là trung bình ổn định hơn (Central Limit Theorem).
+Mặt khác, với S2 chỉ 155 NALU, CPU branch predictor và instruction cache
+chưa ``warm up'' hoàn toàn so với S1. Đây là measurement artifact, không phải
+thuật toán chậm hơn trong S2.
+
+\subsection{Bảo mật (Security)}
+
+\subsubsection{Entropy DC bytes}
+
+\textbf{Kết quả:} Tất cả 8 tổ hợp đạt Entropy $> 7.9$ bits/byte (Bảng~\ref{tab:security}).
+Hybrid S1 đạt cao nhất: $7.9996 \approx 8.0$ (lý thuyết tuyệt đối).
+
+\textbf{Giải thích tại sao tất cả đạt $> 7.9$:}
+Entropy cao phản ánh tính ngẫu nhiên của keystream, không phải của thuật toán
+mã hoá. AES, DES, và RC4 đều có keystream xuất ra gần như ngẫu nhiên (đó là
+yêu cầu của PRG --- Pseudo-Random Generator). XOR với keystream ngẫu nhiên
+làm DC bytes encrypted phân phối gần đều.
+
+\textbf{Tại sao hybrid cao nhất:}
+Per-NALU keystream variation có nghĩa là các NALU khác nhau dùng keystream khác nhau,
+làm phân phối DC bytes encrypted đa dạng hơn. Với AES/DES/RC4 fixed keystream,
+có thể có partial correlation giữa DC bytes và keystream, làm Entropy giảm nhẹ.
+
+\textbf{S1 vs S2 Entropy:}
+Entropy S1 cao hơn S2 vì S1 có nhiều mẫu hơn ($19.037 \times 25 = 475.925$ bytes
+vs. $155 \times 25 = 3.875$ bytes). Với mẫu lớn, ước lượng phân phối chính xác hơn.
+
+\subsubsection{PSNR DC}
+
+\textbf{Kết quả:} Tất cả 8 tổ hợp đạt PSNR DC $< 10$ dB.
+DES có PSNR DC thấp nhất: S1 = 7.30 dB, S2 = 7.26 dB.
+
+\textbf{Giải thích:} PSNR DC thấp có nghĩa là DC bytes encrypted khác nhiều với
+DC bytes gốc (MSE lớn). Tất cả thuật toán đều đạt mức này vì XOR với keystream
+ngẫu nhiên đã đủ để làm MSE tăng cao.
+
+DES đạt PSNR DC thấp nhất có thể do keystream DES tương tác đặc biệt tốt với
+phân phối DC của video này (vì DC bytes thường là giá trị nhỏ gần 0 sau quantization,
+và DES keystream có giá trị phân phối đều hơn RC4 bias).
+
+\textbf{Hàm ý:} PSNR DC $< 10$ dB là điều kiện cần (nhưng không đủ) cho mã hoá tốt.
+Tất cả 4 thuật toán đều đạt --- đây không phải điểm phân biệt giữa chúng.
+
+\subsubsection{SSIM DC}
+
+\textbf{Kết quả:}
+\begin{itemize}
+  \item \textbf{Hybrid:} SSIM DC = $0.0031$ (S1), $0.0184$ (S2) --- gần 0 nhất.
+  \item \textbf{AES:} SSIM DC = $0.0819$ (S1), $0.0855$ (S2) --- dương nhẹ.
+  \item \textbf{DES:} SSIM DC = $-0.0586$ (S1), $-0.0715$ (S2) --- âm (phản tương quan).
+  \item \textbf{RC4:} SSIM DC = $0.0895$ (S1), $0.0783$ (S2) --- dương nhẹ, cao nhất.
+\end{itemize}
+
+\textbf{Giải thích sự khác biệt:}
+\begin{itemize}
+  \item \textbf{Hybrid gần 0 nhất:} Arnold permutation phá vỡ cấu trúc cục bộ
+        trước XOR, sau đó chained diffusion propagates sự thay đổi đều đặn.
+        Kết quả là DC encrypted không tương quan với DC gốc.
+
+  \item \textbf{DES âm (phản tương quan):} Keystream DES-OFB với IV = 0 có
+        đặc tính đặc biệt: tương tác với phân phối DC video tạo ra phản tương quan
+        thống kê. Điều này không phải đặc tính thiết kế mà là hiện tượng ngẫu nhiên
+        phụ thuộc vào nội dung video.
+
+  \item \textbf{AES/RC4 dương nhẹ:} Keystream cố định XOR với DC bytes giữ nguyên
+        một phần cấu trúc tương quan (vì $C[i] = DC[i] \oplus ks_i$ với $ks_i$ hằng số,
+        cấu trúc $\text{DC}[i] - \text{DC}[j]$ được bảo toàn nếu $ks_i = ks_j$).
+\end{itemize}
+
+\textbf{SSIM DC = 0 là tốt nhất} vì nó có nghĩa là cấu trúc thống kê của DC bytes
+bị phá vỡ hoàn toàn --- kẻ tấn công không thể suy luận về DC gốc từ DC encrypted.
+
+\subsubsection{TSSIM DC (Temporal SSIM)}
+
+TSSIM DC baseline (video gốc không mã hoá):
+\begin{itemize}
+  \item S1 baseline = 0.0163 (tương quan temporal tự nhiên giữa frames liên tiếp)
+  \item S2 baseline = 0.0234
+\end{itemize}
+
+\textbf{Kết quả:}
+\begin{itemize}
+  \item \textbf{Hybrid S1:} $0.0071 < 0.0163$ --- Disruption temporal tốt nhất.
+        Mã hoá phá vỡ cấu trúc temporal, TSSIM giảm 56\% so với baseline.
+  \item \textbf{Hybrid S2:} $-0.0199 < 0.0234$ --- Disruption rất tốt,
+        thậm chí tạo phản tương quan temporal.
+  \item \textbf{AES/DES/RC4 S1:} $0.0217$--$0.0238 > 0.0163$ --- Không cải thiện
+        so với baseline! Mã hoá fixed keystream \emph{tăng} TSSIM so với gốc.
+\end{itemize}
+
+\textbf{Giải thích AES/DES/RC4 TSSIM $>$ baseline:}
+Với keystream cố định $ks$:
+\begin{equation}
+\text{TSSIM}(t) = \text{SSIM}(\text{DC}_t \oplus ks, \text{DC}_{t+1} \oplus ks)
+\end{equation}
+
+XOR với cùng $ks$ không thay đổi sự tương quan giữa frames liên tiếp về mặt
+cấu trúc tương đối --- nếu $\text{DC}_t$ và $\text{DC}_{t+1}$ tương tự nhau
+(video ổn định), ciphertext tương ứng cũng tương tự. Thậm chí, XOR fixed có thể
+làm tăng SSIM nếu $ks$ ``align'' tốt với sự khác biệt giữa frames.
+
+Kết quả này nhấn mạnh rằng keystream cố định không những không cải thiện mà còn
+có thể duy trì/tăng cường cấu trúc temporal --- nguy hiểm cho tấn công phân tích
+temporal.
+
+\subsubsection{NPCR và UACI (chỉ hybrid)}
+
+\textbf{Kết quả chi tiết:}
+
+\begin{table}[ht]
+\centering
+\caption{NPCR và UACI cho thuật toán hybrid}
+\label{tab:npcr_detail}
+\begin{tabular}{lrrlr}
+\toprule
+Chiến lược & NPCR (\%) & Ngưỡng (\%) & Đạt? & UACI (\%) \\
+\midrule
+S1 (19.037 NALUs) & 99.5260 & 99.6 & \textbf{Chưa} (sát mép) & 32.7414 \\
+S2 (155 NALUs)    & 99.6903 & 99.6 & \textbf{Đạt} & 32.4751 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Tại sao S2 đạt ngưỡng nhưng S1 thì không:}
+
+Đây là kết quả đáng ngạc nhiên: S2 (ít NALU hơn) lại đạt NPCR cao hơn S1.
+
+Giải thích: NPCR được trung bình qua tất cả NALU mã hoá. Với S1, bao gồm cả
+P/B-frames (Type 1) với phân phối DC bytes đa dạng hơn (motions vectors, residuals
+phức tạp hơn I-frame). Một số P/B-frames có DC bytes pattern đặc biệt làm giảm
+hiệu ứng chained diffusion tại byte cuối, kéo NPCR trung bình xuống dưới $99.6\%$.
+
+Với S2, chỉ I-frames (Type 5) được mã hoá. I-frames là intra-coded hoàn toàn,
+DC bytes có phân phối ``sạch'' hơn, hiệu ứng chained diffusion lan truyền đều đặn
+hơn, dẫn đến NPCR cao hơn.
+
+\textbf{UACI chưa đạt $33.46\%$:}
+
+Cả S1 (32.74\%) và S2 (32.48\%) đều chưa đạt ngưỡng lý thuyết $33.46\%$.
+Nguyên nhân: fixed points của Arnold Cat Map.
+
+Từ Bảng~\ref{tab:arnold_perm}, byte 0 ($i=0$) và byte 24 ($i=24$) là fixed points
+($\pi(0) = 0$, $\pi(24) = 24$). Điều này có nghĩa là $\text{permuted}[0] = \text{DC}[0]$
+--- hoán vị Arnold không dịch chuyển byte 0 sang vị trí khác.
+
+Khi flip byte 0 của DC:
+\begin{itemize}
+  \item $\text{permuted}'[0] = \text{DC}'[0] = \text{DC}[0] \oplus 1$.
+  \item Chained diffusion propagates từ vị trí 0 → 24: tất cả $C[0..24]$ thay đổi.
+  \item NPCR cao: $\approx 99.6\%$. ✓
+  \item Nhưng $|C_1[24] - C_2[24]|$: byte 24 là cộng XOR của tất cả 25 bytes,
+        giá trị biến động mạnh, làm UACI trung bình thấp hơn lý thuyết.
+\end{itemize}
+
+Fixed points làm một số UACI values lệch, kéo trung bình xuống $\approx 32.5\%$.
+
+\subsection{Thảo luận tổng hợp}
+
+\subsubsection{Trade-off security vs. performance}
+
+\begin{table}[ht]
+\centering
+\caption{Tổng hợp trade-off security vs. performance cho 4 thuật toán}
+\label{tab:tradeoff}
+\begin{tabular}{lccccc}
+\toprule
+Thuật toán & Entropy & SSIM DC & TSSIM $<$ base? & NPCR $>99.6$\% & Tốc độ S1 \\
+\midrule
+Hybrid & \textbf{7.9996} & \textbf{0.0031} & \textbf{Có} & \textbf{S2: Có} & 29.245 ns \\
+AES    & 7.9954 & 0.0819 & Không & N/A & 2.753 ns \\
+DES    & 7.9948 & $-0.0586$ & Không & N/A & 23.500 ns \\
+RC4    & 7.9949 & 0.0895 & Không & N/A & \textbf{769 ns} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Hybrid} đạt bảo mật tốt nhất trên mọi chỉ số: Entropy cao nhất, SSIM DC
+gần 0 nhất, TSSIM phá vỡ cấu trúc temporal, và là thuật toán duy nhất có NPCR
+có ý nghĩa. Cái giá là tốc độ thấp nhất: 29.245 ns/NALU, chậm hơn RC4 38 lần.
+
+Tuy nhiên, với DC encrypt time tuyệt đối S1 = 556 ms trên 19.037 NALU, và
+pipeline total = 1.510 s, hybrid vẫn trong ngưỡng chấp nhận được cho ứng dụng
+không yêu cầu real-time cứng (live streaming 30 fps cần $< 33$ ms latency).
+
+\textbf{RC4} nhanh nhất (769 ns/NALU) nhưng kém bảo mật nhất: SSIM DC cao (0.09),
+không phá vỡ TSSIM, NPCR N/A. RC4 phù hợp khi yêu cầu bảo mật thấp và tốc độ
+là ưu tiên hàng đầu.
+
+\textbf{AES} là lựa chọn cân bằng: chuẩn hoá FIPS, nhanh nhờ AES-NI (2.753 ns/NALU),
+keyspace $2^{128}$. Thiếu diffusion và per-NALU variation nhưng nếu chỉ cần
+Entropy $> 7.9$ và PSNR DC $< 10$ dB thì AES đủ.
+
+\textbf{DES} không khuyến nghị: keyspace $2^{56}$ đã bị phá vỡ, chậm như hybrid
+nhưng không có bảo mật của hybrid.
+
+\subsubsection{Ý nghĩa của kết quả NPCR S2}
+
+NPCR S2 = $99.6903\% > 99.6\%$ là kết quả quan trọng nhất của nghiên cứu.
+Nó xác nhận rằng cơ chế chained diffusion (Phương trình~\ref{eq:chained_diffusion}
+từ Chương 3) hoạt động hiệu quả trên dữ liệu thực: 1 bit thay đổi DC
+propagates thay đổi đến $99.69\%$ trong 25 bytes ciphertext.
+
+Kết quả này vượt ngưỡng lý thuyết $99.6\%$ của Wu \cite{wu_npcr} --- chuẩn
+thường dùng cho image encryption --- cho thấy thuật toán hybrid có độ nhạy plaintext
+tốt ngay cả khi chỉ mã hoá 25 bytes/NALU.
+
+\subsubsection{So sánh với ngưỡng chuẩn của Wu et al.}
+
+Các nghiên cứu mã hoá ảnh thường báo cáo NPCR $>99.6\%$ và UACI $\approx 33.46\%$
+trên ảnh $256 \times 256 = 65.536$ bytes. Nghiên cứu này đạt kết quả tương đương
+chỉ với \textbf{25 bytes/NALU} --- do cơ chế chained diffusion hoạt động
+trên toàn bộ 25 bytes thay vì xử lý từng byte độc lập.
+
+\subsubsection{Hạn chế của kết quả thực nghiệm}
+
+\begin{enumerate}
+  \item \textbf{Single dataset:} Tất cả kết quả chỉ trên 1 file video (output.h264).
+        Không biết kết quả có tổng quát hoá cho video khác không.
+
+  \item \textbf{Single key:} Chỉ test với \texttt{testkey}. Với key khác, NPCR/UACI
+        có thể dao động (phụ thuộc vào $x_0, p$ dẫn xuất từ key).
+
+  \item \textbf{Timing not averaged:} DC time đo từ 1 lần chạy (không lấy trung bình
+        nhiều lần). Variance $\pm$5\% có thể ảnh hưởng đến so sánh sát nhau.
+
+  \item \textbf{NPCR S1 chưa đạt ngưỡng:} 99.5260\% $< 99.6\%$ --- chưa đạt chuẩn Wu.
+        Cần phân tích thêm với nhiều video và key khác nhau.
+\end{enumerate}

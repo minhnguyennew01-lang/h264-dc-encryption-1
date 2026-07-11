@@ -1,0 +1,271 @@
+%% Chương 7: Kết luận
+\clearpage
+\phantomsection
+\section*{CHƯƠNG 10. KẾT LUẬN VÀ HƯỚNG PHÁT TRIỂN}
+\addcontentsline{toc}{section}{\numberline{}CHƯƠNG 10. KẾT LUẬN VÀ HƯỚNG PHÁT TRIỂN}
+\setcounter{section}{10}
+\setcounter{subsection}{0}
+\setcounter{figure}{0}
+\setcounter{table}{0}
+\setcounter{equation}{0}
+
+\subsection{Kết luận}
+
+\subsubsection{Tóm tắt nghiên cứu}
+
+Nghiên cứu này đề xuất, cài đặt, và đánh giá toàn diện một hệ thống mã hoá chọn lọc
+DC H.264 lai ghép (hybrid), kết hợp ba tầng bảo mật: PLCM per-NALU keystream
+generation, Arnold 2D Cat Map permutation, và cơ chế khuếch tán chuỗi XOR
+(chained diffusion feedback). Thuật toán hybrid được so sánh với ba thuật toán
+cơ sở (AES-128-CTR với fixed counter, DES-OFB với fixed IV, RC4 với cùng key
+mỗi NALU) trên hai chiến lược (S1: toàn bộ VCL; S2: chỉ I-frame), sử dụng
+10 chỉ số đánh giá từ 4 nhóm: bảo mật, chất lượng hình ảnh, tính đúng đắn, và hiệu năng.
+
+\subsubsection{Kết quả chính}
+
+Nghiên cứu thu được các kết quả chính sau:
+
+\paragraph{Về tính đúng đắn:}
+Tất cả 8 tổ hợp (4 thuật toán $\times$ 2 chiến lược) đạt BER = 0 và SHA-256 PASS,
+xác nhận byte-exact decryptability trên toàn bộ file 219 MB. Đây là invariant cứng
+của thiết kế XOR và được đảm bảo bởi tính xác định (determinism) của PLCM kết hợp
+với tính khả nghịch (invertibility) của Arnold Cat Map.
+
+\paragraph{Về bảo mật:}
+Thuật toán hybrid nổi bật trên tất cả chỉ số bảo mật:
+\begin{itemize}
+  \item \textbf{NPCR S2 = 99.6903\% $> 99.6\%$:} Vượt ngưỡng Wu et al. \cite{wu_npcr},
+        chứng minh hiệu quả của chained diffusion. Đây là thuật toán duy nhất
+        có NPCR có ý nghĩa đánh giá (AES/DES/RC4: N/A do keystream cố định).
+  \item \textbf{Entropy = 7.9996 $\approx$ 8.0:} Gần giá trị lý thuyết tuyệt đối,
+        chứng minh keystream PLCM sinh ra bytes phân phối gần đều.
+  \item \textbf{SSIM DC = 0.0031 $\approx$ 0:} Cấu trúc DC bị phá vỡ gần hoàn toàn.
+  \item \textbf{TSSIM DC = 0.0071 $<$ baseline 0.0163:} Cấu trúc temporal bị phá vỡ.
+        Các thuật toán baseline không đạt mục tiêu này.
+\end{itemize}
+
+\paragraph{Về hiệu năng:}
+RC4 nhanh nhất (769 ns/NALU, S1), tiếp theo là AES (2.753 ns/NALU), DES (23.500 ns/NALU),
+và Hybrid (29.245 ns/NALU). Hybrid chậm hơn RC4 $38\times$ nhưng DC encrypt time
+tuyệt đối S1 = 556 ms --- chấp nhận được cho ứng dụng không real-time cứng.
+
+Phát hiện pipeline convergence S2: khi chỉ 155 NALU được mã hoá, DC $< 1\%$ pipeline.
+I/O đọc/ghi 219 MB chiếm $> 99\%$ tổng thời gian, làm tốc độ thuật toán không
+còn ảnh hưởng đến thời gian tổng (Amdahl's Law).
+
+\subsubsection{Đóng góp của nghiên cứu}
+
+\begin{enumerate}
+  \item \textbf{Thuật toán hybrid với per-NALU keystream:}
+        Đề xuất kết hợp PLCM (keystream per-NALU via \texttt{nalu\_index}),
+        Arnold 2D Cat Map (hoán vị), và chained diffusion feedback (khuếch tán)
+        vào mã hoá DC H.264. Đây là sự kết hợp mới chưa được khảo sát trong
+        các nghiên cứu mã hoá chọn lọc H.264 đã biết.
+
+        Đặc biệt, việc dùng \texttt{nalu\_index} như ``tweak'' cho PLCM
+        --- biến mỗi NALU có keystream độc lập --- giải quyết vấn đề keystream
+        reuse căn bản của AES/DES/RC4 trong ngữ cảnh mã hoá chọn lọc.
+
+  \item \textbf{Cơ chế chained diffusion:}
+        Công thức $C[i] = (\text{permuted}[i] \oplus ks[i]) \oplus C[i-1]$
+        tạo ra hiệu ứng avalanche trong 25 bytes DC: 1 bit thay đổi plaintext
+        propagates đến tất cả bytes ciphertext phía sau. Kết quả NPCR S2 = $99.69\%$
+        xác nhận tính hiệu quả thực nghiệm.
+
+  \item \textbf{Tính byte-exact tuyệt đối (8/8 PASS):}
+        Thiết kế đảm bảo giải mã hoàn toàn lossless cho mọi tổ hợp thuật toán
+        và chiến lược. BER = 0 và SHA-256 PASS trên file 219 MB.
+
+  \item \textbf{Kiến trúc IEncryption plugin-based (C++):}
+        Interface chung cho phép thêm thuật toán mới với 0 thay đổi pipeline.
+        Nền tảng cho triển khai phần cứng (FPGA) và nghiên cứu tiếp theo.
+
+  \item \textbf{Phân tích và giải thích pipeline convergence S2:}
+        Phát hiện và giải thích định lượng hiện tượng khi DC $< 1\%$ pipeline,
+        tốc độ thuật toán không còn là bottleneck (Amdahl's Law trong ngữ cảnh
+        mã hoá chọn lọc). Đây là nhận xét hữu ích cho thiết kế hệ thống thực tế.
+\end{enumerate}
+
+\begin{comment}
+    
+
+\subsection{Hạn chế của nghiên cứu}
+
+\subsubsection{Hạn chế về keyspace}
+
+\textbf{Vấn đề:} Tổng keyspace $2^{58}$ thấp hơn đáng kể so với ngưỡng $2^{128}$
+khuyến nghị cho bảo mật hiện đại. Với GPU hiện đại có thể brute-force $10^{12}$
+khóa/giây, $2^{58}$ bị crack trong vài ngày.
+
+\textbf{Nguyên nhân:} PLCM sử dụng IEEE 754 double-precision (64-bit, 52-bit mantissa),
+giới hạn keyspace hiệu dụng xuống $\approx 2^{53}$.
+Arnold Cat Map đóng góp thêm $\approx 2^5$ nhưng không đủ bù.
+
+\textbf{Đánh giá:} Với ngưỡng bảo mật hiện đại $2^{128}$, thuật toán hybrid
+trong dạng hiện tại \textbf{không phù hợp} cho ứng dụng yêu cầu bảo mật cao.
+Phù hợp hơn cho: (a) nghiên cứu thuật toán, (b) ứng dụng bảo vệ nội dung mức thấp
+(perceptual security, không cần cryptographic security).
+
+\subsubsection{UACI chưa đạt ngưỡng lý thuyết}
+
+\textbf{Vấn đề:} UACI thực tế $\approx 32.5$--$32.7\%$, thấp hơn ngưỡng $33.46\%$
+của Wu et al. Chênh lệch $\approx 0.7$--$1.0\%$.
+
+\textbf{Nguyên nhân:} Fixed points của Arnold Cat Map $(P=3, Q=11, N=5)$:
+byte 0 và byte 24 không bị hoán vị ($\pi(0) = 0$, $\pi(24) = 24$). Điều này
+làm một số bit flip không được phân phối đều qua chained diffusion, kéo UACI xuống.
+
+\textbf{Giải pháp đề xuất:} Thay Arnold fixed-parameter bằng key-dependent Arnold
+--- tham số $(P, Q)$ được dẫn xuất từ khóa K theo từng NALU, loại bỏ fixed points
+cố định. (Xem Hướng phát triển 7.3.2.)
+
+\subsubsection{Hạn chế dataset}
+
+\textbf{Vấn đề:} Toàn bộ thực nghiệm trên 1 file video duy nhất (\texttt{output.h264},
+H.264 Baseline Profile). Không biết kết quả có tổng quát hoá không.
+
+\textbf{Ảnh hưởng cụ thể:}
+\begin{itemize}
+  \item NPCR phụ thuộc phân phối DC bytes của video --- video khác có thể cho
+        NPCR khác.
+  \item SSIM/TSSIM phụ thuộc nội dung video (motion, texture complexity).
+  \item Timing kết quả phụ thuộc hardware và OS scheduling.
+\end{itemize}
+
+\subsubsection{DC\_OFFSET hardcoded}
+
+\textbf{Vấn đề:} DC offset = 19 bytes xác định bằng phân tích thực nghiệm
+trên file output.h264 cụ thể (H.264 Baseline Profile). Với H.264 Main Profile
+hoặc High Profile, cấu trúc slice header khác, DC bytes có thể ở offset khác.
+
+\textbf{Rủi ro:} Nếu áp dụng pipeline này cho file H.264 Main/High Profile,
+sẽ mã hoá sai vùng bytes, có thể gây crash decoder hoặc không đạt hiệu quả bảo mật.
+
+\textbf{Giải pháp:} Parse đầy đủ H.264 bitstream (dùng h264bitstream) để tìm
+offset DC đúng cho từng NALU theo profile --- thay vì hardcode.
+
+\subsubsection{NPCR S1 chưa đạt ngưỡng}
+
+NPCR S1 = 99.5260\% thấp hơn ngưỡng 99.6\% (0.074\% chênh). Điều này
+do P/B-frames trong S1 có phân phối DC bytes phức tạp hơn I-frames,
+ảnh hưởng đến hiệu ứng chained diffusion trung bình.
+Cần nghiên cứu với nhiều video và key để xác định liệu đây là vấn đề hệ thống
+hay chỉ xảy ra với video/key cụ thể này.
+\end{comment}
+\subsection{Hướng phát triển}
+
+\subsubsection{Tăng keyspace lên $\geq 2^{128}$}
+
+\textbf{Đề xuất:} Thay PLCM double-precision ($2^{53}$) bằng PLCM multi-precision
+128-bit fixed-point:
+
+\begin{itemize}
+  \item Biểu diễn $x_0$ và $p$ bằng số nguyên 128-bit (4 $\times$ uint32\_t hoặc
+        2 $\times$ uint64\_t), thực hiện phép chia với precision đủ cao.
+  \item Keyspace tăng lên $\approx 2^{127}$ (giảm 1 bit do ràng buộc $x_0 \in (0, 0.5)$).
+  \item Chi phí tính toán: phép chia 128-bit chậm hơn double $\approx 3$--$5\times$,
+        nhưng hybrid vẫn nhanh hơn nhiều so với full AES encryption.
+\end{itemize}
+
+Với giải pháp này, keyspace hybrid đạt $\approx 2^{127} + 2^5 \approx 2^{127}$,
+vượt ngưỡng $2^{128}$ (thiếu 1 bit --- cần thêm 1 bit tham số nữa, ví dụ từ Arnold).
+
+\subsubsection{Cải thiện UACI --- Key-dependent Arnold permutation}
+
+\textbf{Đề xuất:} Thay Arnold fixed $(P=3, Q=11)$ bằng $(P_n, Q_n)$ được dẫn xuất
+từ key K và nalu\_index $n$:
+
+\begin{equation}
+(P_n, Q_n) = \text{KeyDerive}(K, n, \{1,\ldots,N-1\}^2)
+\end{equation}
+
+Với $N = 5$: $P_n \in \{1, 2, 3, 4\}$, $Q_n \in \{1, 2, 3, 4\}$, 16 kết hợp.
+
+\textbf{Lợi ích:}
+\begin{itemize}
+  \item Loại bỏ fixed points cố định (vị trí fixed point phụ thuộc vào $(P, Q)$,
+        thay đổi mỗi NALU → không còn fixed point nhất quán).
+  \item Tăng keyspace Arnold từ $2^5$ lên $2^5 \times N_{\text{nalu}} \approx 2^5 \times 2^{14} = 2^{19}$
+        (với 19.037 NALU) --- tăng keyspace per-file.
+  \item Dự báo UACI tăng gần $33.46\%$.
+\end{itemize}
+
+\subsubsection{Mở rộng dataset --- Nhiều video và profile}
+
+\textbf{Đề xuất:} Kiểm tra trên ít nhất 10 video đa dạng:
+\begin{itemize}
+  \item \textbf{Resolution:} 480p (SD), 1080p (FHD), 4K (UHD).
+  \item \textbf{Profile:} Baseline, Main, High (cần resolve vấn đề DC\_OFFSET).
+  \item \textbf{Content type:} Animation (ít motion, DC đều), Sports (nhiều motion,
+        DC phức tạp), Surveillance (ít thay đổi, DC ổn định), Live action.
+  \item \textbf{Bitrate:} Low ($<$ 1 Mbps), Medium (5--10 Mbps), High ($>$ 20 Mbps).
+\end{itemize}
+
+Mục tiêu: xác lập khoảng NPCR = $[99.5\%, 99.7\%]$ cho hybrid trên nhiều video,
+chứng minh tính tổng quát hoá của kết quả.
+\begin{comment}
+\subsubsection{Triển khai phần cứng FPGA}
+
+\textbf{Động lực:} Tên đề tài nghiên cứu đề cập triển khai FPGA. Soft-core FPGA
+(Xilinx Zynq hoặc Intel Cyclone) có thể đạt throughput cao hơn soft CPU nhờ:
+\begin{itemize}
+  \item Pipeline PLCM parallel: nhiều stage PLCM song song.
+  \item Fixed-point arithmetic: 128-bit fixed-point nhanh hơn software.
+  \item Streaming interface: nhận NALU bytes trực tiếp từ network, không qua file I/O.
+\end{itemize}
+
+\textbf{Mục tiêu hiệu năng:} Real-time encryption cho video 4K 30fps ($\approx$ 300 Mbps).
+Ước tính: với 19.037 NALU/219 MB, tỷ lệ là $\approx$ 87 NALU/MB. Video 300 Mbps
+cần xử lý $\approx$ 3.260 NALU/s. Với FPGA 100 MHz pipeline, cần $< 30.000$
+clock cycles/NALU cho hybrid.
+\end{comment}
+
+\subsubsection{Mở rộng sang H.265/HEVC và AV1}
+
+\textbf{H.265/HEVC:} Thay macroblock 16$\times$16 bằng CTU (Coding Tree Unit)
+64$\times$64, làm thay đổi cách DC coefficients được tổ chức trong bitstream.
+Cần phân tích lại để tìm DC\_OFFSET tương đương trong H.265.
+
+\textbf{AV1:} Open-source codec do Alliance for Open Media phát triển,
+đang ngày càng phổ biến (YouTube, Netflix). Sử dụng superblock 128$\times$128
+và entropy coding khác hoàn toàn. Nghiên cứu DC selective encryption cho AV1
+là hướng nghiên cứu mới.
+
+\subsubsection{Phân tích bảo mật hình thức}
+
+\textbf{Đề xuất:} Phân tích toán học chặt chẽ các tính chất bảo mật của hybrid:
+\begin{itemize}
+  \item \textbf{IND-CPA:} Chứng minh (hoặc bác bỏ) tính IND-CPA của hybrid
+        với keyspace $2^{128}$ (sau khi nâng cấp PLCM).
+  \item \textbf{IND-CCA:} Phân tích khả năng tấn công chosen-ciphertext.
+  \item \textbf{Chosen-IV attack:} Phân tích nếu kẻ tấn công kiểm soát được
+        \texttt{nalu\_index} (ví dụ trong video streaming theo yêu cầu).
+  \item \textbf{Differential cryptanalysis:} Phân tích mức độ an toàn của
+        chained diffusion trước tấn công vi sai (differential attack).
+\end{itemize}
+
+\subsubsection{Kết hợp với kỹ thuật bảo mật luồng (Stream Security)}
+
+\textbf{Đề xuất:} Kết hợp DC selective encryption với HMAC (Hash-based Message
+Authentication Code) để đảm bảo tính toàn vẹn (integrity) của file mã hoá.
+Hiện tại, kẻ tấn công có thể sửa DC bytes encrypted mà không bị phát hiện ---
+hệ thống chỉ có confidentiality, không có integrity.
+
+Giải pháp: thêm SHA-256 HMAC trên toàn bộ file encrypted như metadata ngoài băng tần
+(out-of-band) để phát hiện tampering.
+
+\subsection{Tổng kết}
+
+Nghiên cứu này chứng minh rằng mã hoá chọn lọc DC H.264 với thuật toán hybrid
+(PLCM + Arnold + Chained Diffusion) là khả thi và hiệu quả cho perceptual security.
+Thuật toán đạt NPCR $> 99.6\%$ (S2), Entropy $\approx 8.0$, và byte-exact decryptability
+trên file H.264 thực tế 219 MB, 19.348 NALU.
+
+Hạn chế chính là keyspace $2^{58}$ chưa đủ cho cryptographic security, được thừa nhận
+như hướng nghiên cứu tương lai. Đối với các ứng dụng bảo vệ nội dung mức perceptual
+(giám sát an ninh nhẹ, watermarking, content protection không yêu cầu FIPS compliance),
+thuật toán hybrid trong dạng hiện tại đạt hiệu quả tốt với overhead chấp nhận được.
+
+Kiến trúc IEncryption plugin-based và pipeline C++ đầy đủ tạo nền tảng vững chắc
+cho triển khai thực tế và nghiên cứu mở rộng trong tương lai, đặc biệt là hướng
+FPGA hardware implementation cho video 4K real-time.

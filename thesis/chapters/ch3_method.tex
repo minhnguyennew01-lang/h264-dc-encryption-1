@@ -1,0 +1,481 @@
+%% Chương 3: Phương pháp đề xuất — Hybrid
+\clearpage
+\phantomsection
+\section*{CHƯƠNG 3. PHƯƠNG PHÁP ĐỀ XUẤT: THUẬT TOÁN HYBRID}
+\addcontentsline{toc}{section}{\numberline{}CHƯƠNG 3. PHƯƠNG PHÁP ĐỀ XUẤT: THUẬT TOÁN HYBRID}
+\setcounter{section}{3}
+\setcounter{subsection}{0}
+\setcounter{figure}{0}
+\setcounter{table}{0}
+\setcounter{equation}{0}
+
+\subsection{Động lực thiết kế}
+
+\subsubsection{Phân tích yêu cầu}
+
+Một thuật toán mã hoá chọn lọc DC H.264 hiệu quả cần đáp ứng đồng thời ba yêu cầu
+thường xung đột nhau:
+
+\begin{enumerate}
+  \item \textbf{Bảo mật mạnh:} NPCR $> 99.6\%$, Entropy $> 7.9$, SSIM DC $\approx 0$.
+        Điều này đòi hỏi cả \emph{keystream variation per NALU} và \emph{intra-NALU diffusion}.
+
+  \item \textbf{Hiệu năng chấp nhận được:} DC encrypt time phải đủ thấp để
+        không trở thành bottleneck trong pipeline (đặc biệt với S1: 19.037 NALU).
+        Mục tiêu: $< 100$ ms tổng cho S1.
+
+  \item \textbf{Byte-exact decryptability:} Giải mã phải tái tạo DC bytes gốc
+        chính xác từng bit. BER = 0 là invariant cứng không thể vi phạm.
+\end{enumerate}
+
+\subsubsection{Tại sao cần per-NALU keystream variation}
+
+Đây là yêu cầu thiết kế quan trọng nhất. Xét kịch bản: kẻ tấn công có thể
+quan sát nhiều NALU encrypted trong cùng file. Nếu keystream giống nhau:
+
+\begin{equation}
+C_1 \oplus C_2 = (P_1 \oplus ks) \oplus (P_2 \oplus ks) = P_1 \oplus P_2
+\end{equation}
+
+Kẻ tấn công biết $C_1 \oplus C_2 = P_1 \oplus P_2$ mà không cần biết $ks$.
+Nếu biết một trong hai plaintext (thông qua phân tích thống kê video), hắn suy ra
+plaintext còn lại. Đây là tấn công ``many-time pad'' --- vi phạm IND-CPA.
+
+Giải pháp: thay đổi keystream cho mỗi NALU bằng cách sử dụng \texttt{nalu\_index}
+như một ``tweak'' --- giá trị công khai (không bí mật) nhưng khác nhau mỗi NALU,
+đảm bảo keystream khác nhau ngay cả với cùng khóa K.
+
+\subsubsection{Tại sao cần chained diffusion}
+
+Chỉ có per-NALU keystream variation chưa đủ. Xét tấn công flip 1 bit:
+kẻ tấn công flip byte $DC'[0] = DC[0] \oplus 1$ và gửi cho server.
+Nếu chỉ dùng XOR đơn (không diffusion):
+
+\begin{equation}
+C'[i] = \text{permuted}'[i] \oplus ks[i]
+\end{equation}
+
+Chỉ $C'[0]$ thay đổi (do chỉ $\text{permuted}'[0]$ thay đổi). Vậy NPCR $= 1/25 = 4\%$.
+
+Cơ chế chained diffusion giải quyết điều này: khi $C[0]$ thay đổi, nó làm $C[1]$
+thay đổi (vì $C[1]$ phụ thuộc $C[0]$), từ đó $C[2], \ldots, C[24]$ đều thay đổi.
+Kết quả: 1 bit thay đổi plaintext → 25 bytes thay đổi ciphertext → NPCR $\approx 99.6\%$.
+
+\subsubsection{Tại sao cần Arnold permutation}
+
+Arnold permutation phục vụ hai mục đích:
+
+\begin{enumerate}
+  \item \textbf{Phá vỡ cấu trúc cục bộ:} DC bytes liền kề trong NALU thường
+        tương quan (cùng macroblock hoặc macroblock lân cận). Hoán vị Arnold
+        trộn các bytes này trước khi XOR, làm mất tương quan cục bộ.
+
+  \item \textbf{Tăng thành phần keyspace:} Tham số $(P, Q)$ của Arnold map
+        là thành phần bổ sung của khóa, mặc dù keyspace nhỏ ($\approx 2^5$).
+
+  \item \textbf{Tăng UACI:} Hoán vị làm thay đổi vị trí bytes trước diffusion,
+        lý thuyết tăng UACI bằng cách phân phối đều hiệu ứng thay đổi.
+        Tuy nhiên, Arnold fixed point ở một số NALUs làm UACI chưa đạt $33.46\%$
+        (phân tích chi tiết ở Chương 6).
+\end{enumerate}
+
+\subsection{Kiến trúc tổng thể}
+
+Thuật toán hybrid kết hợp ba tầng bảo mật theo thứ tự:
+
+\begin{equation}
+\text{DC bytes} \xrightarrow{\text{PLCM keystream}} ks[0..24]
+\xrightarrow{\text{Arnold}} \text{permuted}[0..24]
+\xrightarrow{\text{XOR + diffusion}} C[0..24]
+\end{equation}
+
+\begin{figure}[ht]
+\centering
+\input{figures/hybrid_flowchart}
+\caption{Sơ đồ luồng thuật toán hybrid: PLCM sinh keystream, Arnold hoán vị,
+         XOR + chained diffusion tạo ciphertext; bên phải là sơ đồ giải mã ngược}
+\label{fig:hybrid_flowchart}
+\end{figure}
+
+\subsection{Bước 1: Sinh keystream PLCM (per-NALU)}
+
+\subsubsection{Hàm dẫn xuất khóa (Key Derivation Function)}
+
+Từ khóa $K$ (chuỗi ký tự ASCII), hàm dẫn xuất khóa tạo ra hai tham số PLCM
+$(x_0, p)$:
+
+\begin{enumerate}
+  \item Tính hash của $K$: $h = \text{SHA-256}(K)$ (trong thực tế, dùng custom hash đơn giản hơn).
+  \item Lấy 8 bytes đầu của $h$, chuyển thành double $x_0' \in [0, 1)$.
+  \item Ràng buộc vào vùng hỗn độn: $x_0 = 0.0001 + x_0' \times 0.4998$.
+  \item Tương tự cho $p$: $p = 0.0001 + h' \times 0.2499$ (với $h'$ từ bytes 8--15).
+\end{enumerate}
+
+Kết quả: $x_0 \in (0.0001, 0.4999)$ và $p \in (0.0001, 0.2500)$ --- đảm bảo
+PLCM hoạt động trong vùng hỗn độn cho mọi khóa K.
+
+\subsubsection{Sinh điều kiện đầu per-NALU}
+
+Thay vì dùng trực tiếp $x_0$ cho mọi NALU (keystream cố định), thuật toán
+lặp PLCM $n = \texttt{nalu\_index}$ lần để tạo điều kiện đầu riêng cho NALU thứ $n$:
+
+\begin{equation}
+x_n = f^n(x_0, p)
+\label{eq:plcm_advance}
+\end{equation}
+
+Với $f$ là PLCM (Phương trình 2.1). Vì PLCM nhạy cảm với điều kiện đầu,
+$x_n$ và $x_{n+1}$ khác nhau hoàn toàn ngay cả khi chỉ cách nhau 1 lần lặp.
+
+\textbf{Tối ưu hoá thực tế:} Thay vì lặp $n$ lần cho mỗi NALU (chi phí $O(n)$),
+thực tế cài đặt duy trì trạng thái PLCM liên tục qua các NALU:
+\begin{itemize}
+  \item NALU đầu tiên: $x_{\text{curr}} = f(x_0, p)$ (1 lần lặp).
+  \item NALU tiếp theo: $x_{\text{curr}} = f(x_{\text{curr}}, p)$ (thêm 1 lần lặp).
+  \item Chi phí trung bình: O(1) mỗi NALU.
+\end{itemize}
+
+\subsubsection{Sinh keystream 25 bytes}
+
+Từ điều kiện đầu $x_n$ của NALU thứ $n$, sinh keystream 25 bytes:
+
+\begin{equation}
+ks[i] = \left\lfloor f^{(i)}(x_n, p) \times 256 \right\rfloor \bmod 256, \quad i = 0, 1, \ldots, 24
+\end{equation}
+
+Sau đó lấy phần nguyên và modulo 256 để chuyển từ $[0, 1)$ sang byte $[0, 255]$.
+
+\textbf{Ví dụ minh hoạ:} Giả sử $x_n = 0.314159$, $p = 0.1234$:
+\begin{itemize}
+  \item $f(0.314159, 0.1234) = (0.314159 - 0.1234) / (0.5 - 0.1234) = 0.5064$
+        (rơi vào nhánh thứ hai: $x \in [p, 0.5)$)
+  \item $ks[0] = \lfloor 0.5064 \times 256 \rfloor = \lfloor 129.64 \rfloor = 129$
+\end{itemize}
+
+\subsection{Bước 2: Hoán vị Arnold 2D Cat Map}
+
+\subsubsection{Thuật toán hoán vị}
+
+Mảng DC 25 bytes được xử lý như ma trận $5 \times 5$. Cho mỗi tọa độ $(x, y)$
+với $x, y \in \{0, 1, 2, 3, 4\}$:
+
+\begin{equation}
+\begin{pmatrix} x' \\ y' \end{pmatrix}
+= \begin{pmatrix} 1 & 3 \\ 11 & 34 \end{pmatrix}
+\begin{pmatrix} x \\ y \end{pmatrix} \pmod{5}
+\end{equation}
+
+Bảng hoán vị đầy đủ với $P=3, Q=11, N=5$:
+
+\begin{table}[ht]
+\centering
+\caption{Hoán vị Arnold map với $P=3, Q=11, N=5$: chỉ số byte gốc $\to$ chỉ số đích}
+\label{tab:arnold_perm}
+\begin{tabular}{ccc|ccc}
+\toprule
+$(x,y)$ gốc & Chỉ số gốc $i$ & Chỉ số đích $i'$ &
+$(x,y)$ gốc & Chỉ số gốc $i$ & Chỉ số đích $i'$ \\
+\midrule
+(0,0) & 0  & 0  & (0,3) & 15 & 15 \\
+(1,0) & 1  & 11 & (1,3) & 16 & 1  \\
+(2,0) & 2  & 22 & (2,3) & 17 & 12 \\
+(3,0) & 3  & 8  & (3,3) & 18 & 23 \\
+(4,0) & 4  & 19 & (4,3) & 19 & 9  \\
+(0,1) & 5  & 20 & (0,4) & 20 & 5  \\
+(1,1) & 6  & 6  & (1,4) & 21 & 16 \\
+(2,1) & 7  & 17 & (2,4) & 22 & 2  \\
+(3,1) & 8  & 3  & (3,4) & 23 & 13 \\
+(4,1) & 9  & 14 & (4,4) & 24 & 24 \\
+(0,2) & 10 & 10 & & & \\
+(1,2) & 11 & 21 & & & \\
+(2,2) & 12 & 7  & & & \\
+(3,2) & 13 & 18 & & & \\
+(4,2) & 14 & 4  & & & \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Quan sát: byte 0 và byte 24 là \textbf{fixed points} của hoán vị này
+($\pi(0) = 0$ và $\pi(24) = 24$). Đây là đặc tính của Arnold map với tham số
+$(3, 11)$ và $N = 5$ --- fixed point là nguyên nhân UACI chưa đạt $33.46\%$
+(phân tích ở Chương 6, mục 6.4.5).
+
+\subsubsection{Cài đặt C++}
+
+Hoán vị được tính trước (precomputed) thành bảng tra cứu $\pi[25]$ để tránh
+tính lại mỗi lần mã hoá:
+
+\begin{lstlisting}[language=C++, caption={Precomputed Arnold permutation --- \texttt{hybrid\_encryption.cpp}}]
+// Precomputed perm[src_index] = dst_index for P=3, Q=11, N=5
+static const int ARNOLD_PERM[25] = {
+    0, 11, 22,  8, 19,
+   20,  6, 17,  3, 14,
+   10, 21,  7, 18,  4,
+   15,  1, 12, 23,  9,
+    5, 16,  2, 13, 24
+};
+
+// Apply Arnold permutation: permuted[ARNOLD_PERM[i]] = dc[i]
+std::vector<uint8_t> applyArnold(const std::vector<uint8_t>& dc) {
+    std::vector<uint8_t> permuted(25);
+    for (int i = 0; i < 25; ++i)
+        permuted[ARNOLD_PERM[i]] = dc[i];
+    return permuted;
+}
+\end{lstlisting}
+
+\subsection{Bước 3: XOR và Khuếch tán chuỗi (Chained Diffusion)}
+
+\subsubsection{Công thức mã hoá}
+
+Sau khi có $\text{permuted}[0..24]$ và $ks[0..24]$, quá trình mã hoá:
+
+\begin{equation}
+C[0] = \text{permuted}[0] \oplus ks[0]
+\label{eq:c0}
+\end{equation}
+
+\begin{equation}
+C[i] = \bigl(\text{permuted}[i] \oplus ks[i]\bigr) \oplus C[i-1], \quad i = 1, 2, \ldots, 24
+\label{eq:chained_diffusion}
+\end{equation}
+
+Khai triển ra với $i = 2$:
+\begin{align}
+C[2] &= (\text{permuted}[2] \oplus ks[2]) \oplus C[1] \\
+     &= (\text{permuted}[2] \oplus ks[2]) \oplus (\text{permuted}[1] \oplus ks[1]) \oplus C[0] \\
+     &= (\text{permuted}[2] \oplus ks[2]) \oplus (\text{permuted}[1] \oplus ks[1]) \oplus (\text{permuted}[0] \oplus ks[0])
+\end{align}
+
+Tổng quát:
+\begin{equation}
+C[i] = \bigoplus_{j=0}^{i} \bigl(\text{permuted}[j] \oplus ks[j]\bigr)
+\label{eq:chained_expand}
+\end{equation}
+
+Phương trình~(\ref{eq:chained_expand}) cho thấy $C[i]$ phụ thuộc vào \emph{tất cả}
+$\text{permuted}[0..i]$ và $ks[0..i]$.
+
+\subsubsection{Phân tích hiệu ứng khuếch tán (Avalanche Analysis)}
+
+\textbf{Kịch bản:} Byte $\text{permuted}[k]$ thay đổi 1 bit (do flip 1 bit DC[j] mà $\pi(j) = k$).
+Hiệu ứng lan truyền:
+
+\begin{itemize}
+  \item $C[k]$ thay đổi (vì phụ thuộc $\text{permuted}[k]$).
+  \item $C[k+1]$ thay đổi (vì phụ thuộc $C[k]$).
+  \item $C[k+2]$ thay đổi (vì phụ thuộc $C[k+1]$).
+  \item $\vdots$
+  \item $C[24]$ thay đổi (vì phụ thuộc $C[23]$).
+\end{itemize}
+
+Do đó, khi $k = 0$ (flip byte đầu tiên của DC, tức byte 0 sau hoán vị):
+tất cả 25 bytes $C[0..24]$ đều thay đổi $\Rightarrow$ NPCR lý thuyết = 100\%.
+
+Khi $k = 24$ (flip byte cuối): chỉ $C[24]$ thay đổi $\Rightarrow$ NPCR = 4\%.
+
+\textbf{NPCR trung bình lý thuyết:} Trung bình qua 25 vị trí byte:
+\begin{equation}
+\overline{\text{NPCR}}_{\text{theory}} = \frac{1}{25}\sum_{k=0}^{24} \frac{25 - k}{25} \times 100\%
+= \frac{1}{25} \times \frac{(25+1) \times 25/2}{25} \times 100\% = \frac{26}{50} \times 100\% = 52\%
+\end{equation}
+
+Tuy nhiên, NPCR được đo bằng flip byte 0 của DC gốc, qua hoán vị Arnold:
+byte 0 của DC ($i=0$) sau hoán vị $\pi(0) = 0$, nên đổ vào $\text{permuted}[0] = k = 0$.
+Do đó NPCR thực tế $\approx 100\%$ (lý thuyết), kết quả đo được 99.53--99.69\%.
+
+\textbf{Lý giải sai lệch 0.31--0.47\%:}
+Do \textbf{byte 24 là fixed point} ($\pi(24) = 24$): $\text{permuted}[24] = \text{DC}[24]$.
+Khi flip byte 0, $C[0] \to C[23]$ đều thay đổi nhưng với xác suất thay đổi khác nhau
+do XOR với $ks$ có thể tình cờ bù trừ. Sai lệch thực nghiệm từ phân phối DC video cụ thể.
+
+\subsubsection{Cài đặt C++ --- Mã hoá}
+
+\begin{lstlisting}[language=C++, caption={Mã hoá hybrid với chained diffusion --- \texttt{hybrid\_encryption.cpp}}]
+std::vector<uint8_t> HybridEncryption::encrypt(
+        const std::vector<uint8_t>& dc_data,
+        const std::vector<uint8_t>& key,
+        int nalu_index) {
+
+    // Step 1: Generate PLCM keystream (per-NALU via nalu_index)
+    auto ks = generateKeystream(key, nalu_index, 25);  // 25 bytes
+
+    // Step 2: Arnold permutation
+    auto permuted = applyArnold(dc_data);              // 25 bytes permuted
+
+    // Step 3: XOR + chained diffusion
+    std::vector<uint8_t> cipher(25);
+    cipher[0] = permuted[0] ^ ks[0];
+    for (int i = 1; i < 25; ++i)
+        cipher[i] = (permuted[i] ^ ks[i]) ^ cipher[i-1];
+
+    return cipher;
+}
+\end{lstlisting}
+
+\subsection{Giải mã (Decryption)}
+
+\subsubsection{Giải mã chained diffusion}
+
+Giải mã chained diffusion là phép ngược của Phương trình~(\ref{eq:chained_diffusion}):
+
+\begin{equation}
+\text{permuted}[0] = C[0] \oplus ks[0]
+\label{eq:dec0}
+\end{equation}
+
+\begin{equation}
+\text{permuted}[i] = C[i] \oplus C[i-1] \oplus ks[i], \quad i = 1, 2, \ldots, 24
+\label{eq:dec_chain}
+\end{equation}
+
+\textbf{Chứng minh tính đúng đắn:}
+\begin{align}
+C[i] \oplus C[i-1] \oplus ks[i] &= (\text{permuted}[i] \oplus ks[i] \oplus C[i-1]) \oplus C[i-1] \oplus ks[i] \\
+&= \text{permuted}[i] \oplus ks[i] \oplus ks[i] \oplus C[i-1] \oplus C[i-1] \\
+&= \text{permuted}[i] \qquad \checkmark
+\end{align}
+
+Vì $a \oplus a = 0$ với mọi $a$.
+
+\subsubsection{Giải mã Arnold ngược}
+
+Sau khi có $\text{permuted}[0..24]$, áp dụng hoán vị ngược $\pi^{-1}$:
+
+\begin{equation}
+\text{DC}[i] = \text{permuted}[\pi(i)], \quad \forall i \in \{0, \ldots, 24\}
+\end{equation}
+
+Hoặc tương đương: $\text{DC}[\pi^{-1}(j)] = \text{permuted}[j]$ với hoán vị ngược
+được precomputed từ ma trận $\mathbf{A}^{-1}$.
+
+\subsubsection{Tính xác định và byte-exact}
+
+Vì PLCM là hàm xác định (deterministic) và \texttt{nalu\_index} là tham số công khai
+(biết được từ vị trí NALU trong file), quá trình giải mã sinh lại đúng keystream
+$ks$ đã dùng khi mã hoá. Kết hợp với giải mã XOR-chain và Arnold inverse hoàn toàn
+xác định, toàn bộ quá trình giải mã là \textbf{deterministic và lossless}.
+
+\textbf{Kết quả thực nghiệm:} 8/8 tổ hợp đạt BER = 0 và SHA-256 PASS,
+xác nhận byte-exact cho toàn bộ file 219 MB.
+
+\subsubsection{Cài đặt C++ --- Giải mã}
+
+\begin{lstlisting}[language=C++, caption={Giải mã hybrid --- \texttt{hybrid\_encryption.cpp}}]
+std::vector<uint8_t> HybridEncryption::decrypt(
+        const std::vector<uint8_t>& encrypted_data,
+        const std::vector<uint8_t>& key,
+        int nalu_index) {
+
+    // Step 1: Regenerate same PLCM keystream (same key, same nalu_index)
+    auto ks = generateKeystream(key, nalu_index, 25);
+
+    // Step 2: Inverse chained diffusion XOR
+    std::vector<uint8_t> permuted(25);
+    permuted[0] = encrypted_data[0] ^ ks[0];
+    for (int i = 1; i < 25; ++i)
+        permuted[i] = encrypted_data[i] ^ encrypted_data[i-1] ^ ks[i];
+
+    // Step 3: Inverse Arnold permutation
+    return inverseArnold(permuted);
+}
+\end{lstlisting}
+
+\subsection{Interface IEncryption --- Kiến trúc mở rộng}
+
+\subsubsection{Thiết kế abstract interface}
+
+Tất cả 4 thuật toán (hybrid, AES, DES, RC4) đều triển khai qua interface chung:
+
+\begin{lstlisting}[language=C++, caption={IEncryption interface --- \texttt{algorithms/encryption\_interface.h}}]
+class IEncryption {
+public:
+    virtual ~IEncryption() = default;
+
+    // Encrypt dc_data (25 bytes) với key và nalu_index
+    // nalu_index được dùng bởi hybrid để tạo per-NALU keystream
+    // AES/DES/RC4 bỏ qua nalu_index (keystream cố định)
+    virtual std::vector<uint8_t> encrypt(
+        const std::vector<uint8_t>& dc_data,
+        const std::vector<uint8_t>& key,
+        int nalu_index) = 0;
+
+    virtual std::vector<uint8_t> decrypt(
+        const std::vector<uint8_t>& encrypted_data,
+        const std::vector<uint8_t>& key,
+        int nalu_index) = 0;
+
+    // Factory method: tạo instance theo tên thuật toán
+    // Hỗ trợ: "hybrid", "aes", "des", "rc4"
+    static std::unique_ptr<IEncryption> create(const std::string& algo_name);
+};
+\end{lstlisting}
+
+\subsubsection{Factory Pattern}
+
+\begin{lstlisting}[language=C++, caption={Factory method --- \texttt{algorithms/encryption\_factory.cpp}}]
+std::unique_ptr<IEncryption> IEncryption::create(const std::string& algo) {
+    if (algo == "hybrid") return std::make_unique<HybridAlgo>();
+    if (algo == "aes")    return std::make_unique<AesAlgo>();
+    if (algo == "des")    return std::make_unique<DesAlgo>();
+    if (algo == "rc4")    return std::make_unique<Rc4Algo>();
+    throw std::invalid_argument("Unknown algorithm: " + algo);
+}
+\end{lstlisting}
+
+Pipeline chỉ gọi \texttt{IEncryption::create(algo\_name)} một lần, sau đó
+gọi \texttt{encrypt()} / \texttt{decrypt()} trong vòng lặp NALU. Thêm thuật toán
+mới chỉ cần: (1) tạo class mới kế thừa IEncryption, (2) đăng ký trong factory.
+Pipeline không cần sửa.
+
+\subsection{Phân tích keyspace}
+
+\subsubsection{Keyspace từng thành phần}
+
+\begin{table}[ht]
+\centering
+\caption{Phân tích keyspace thuật toán hybrid}
+\label{tab:keyspace}
+\begin{tabular}{llll}
+\toprule
+Thành phần & Tham số & Keyspace & Ghi chú \\
+\midrule
+PLCM điều kiện đầu & $x_0 \in (0.0001, 0.4999)$ & $\approx 2^{52}$ & Giới hạn mantissa 52-bit \\
+PLCM tham số & $p \in (0.0001, 0.2500)$ & $\approx 2^{51}$ & Cùng giới hạn \\
+PLCM tổng & $(x_0, p)$ & $\approx 2^{53}$ & Kết hợp (overlap do cùng nguồn) \\
+Arnold Cat Map & $(P, Q)$ với $N=5$ & $\approx 2^{4}$ & $P, Q \in \{1,2,3,4\}$: 16 cặp \\
+Arnold iterations & số lần lặp & $\approx 2^{1}$ & Thực tế cố định = 1 \\
+\midrule
+\textbf{Tổng ước tính} & & $\approx 2^{58}$ & $2^{53} + 2^{4} \approx 2^{53}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Đánh giá và hạn chế}
+
+Keyspace $2^{58}$ tương đương khoảng $2.88 \times 10^{17}$ khóa phân biệt.
+Với phần cứng hiện đại (GPU có thể thử $10^{12}$ khóa/giây):
+thời gian brute-force $\approx 2^{58} / 10^{12} \approx 288.000$ giây $\approx 3.3$ ngày.
+
+Đây là \textbf{không đủ} cho bảo mật hiện đại (ngưỡng $2^{128}$). Hạn chế này
+xuất phát từ việc sử dụng IEEE 754 double-precision (52-bit mantissa) cho PLCM.
+
+Giải pháp đề xuất trong Chương 7: thay PLCM double bằng PLCM multi-precision
+128-bit fixed-point, tăng keyspace lên $2^{128}$.
+
+\subsection{Tóm tắt thuật toán}
+
+\begin{table}[ht]
+\centering
+\caption{Tóm tắt thuật toán hybrid mã hoá và giải mã}
+\label{tab:algo_summary}
+\begin{tabular}{lll}
+\toprule
+Bước & Mã hoá & Giải mã \\
+\midrule
+1 & PLCM: $(K, \texttt{nalu\_index}) \to ks[0..24]$ & PLCM: $(K, \texttt{nalu\_index}) \to ks[0..24]$ \\
+2 & Arnold: $\text{DC}[0..24] \to \text{permuted}[0..24]$ & XOR-chain ngược: $C[0..24] \to \text{permuted}[0..24]$ \\
+3 & XOR-chain: $\text{permuted} + ks \to C[0..24]$ & Arnold$^{-1}$: $\text{permuted}[0..24] \to \text{DC}[0..24]$ \\
+\bottomrule
+\end{tabular}
+\end{table}

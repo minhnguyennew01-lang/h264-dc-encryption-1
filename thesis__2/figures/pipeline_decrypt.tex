@@ -1,0 +1,91 @@
+%% Pipeline giải mã H.264 DC Selective Encryption — 3 blocks
+%% Adapted from ATC_figure/Figure/decrypt_fix.tex
+\begin{tikzpicture}[
+    scale=0.92, transform shape,
+    >=Stealth,
+    font=\scriptsize,
+    arr/.style={->, line width=0.68pt},
+    darr/.style={->, dashed, line width=0.68pt},
+    frame/.style={draw, rounded corners=3pt, line width=0.80pt},
+    box/.style={draw, rounded corners=2pt, align=center, inner sep=2.6pt, minimum height=0.70cm},
+    sbox/.style={box, minimum width=1.18cm},
+    mbox/.style={box, minimum width=1.85cm},
+    lbox/.style={box, minimum width=2.30cm},
+    note/.style={font=\tiny, align=center}
+]
+
+% =========================================================
+% 1) PREPROCESSING BLOCK (Decryption side)
+% =========================================================
+\draw[frame] (0,0) rectangle (8.55,-2.55);
+\node[anchor=west, font=\bfseries\normalsize] at (0.18,-0.28) {Preprocessing Block};
+
+\node[sbox, minimum width=1.55cm, minimum height=0.92cm] (enc) at (1.05,-1.35)
+{\textbf{Encrypted}\\\textbf{H.264/AVC}\\\textbf{Bitstream}};
+
+\node[mbox, minimum width=1.80cm, minimum height=0.92cm] (parse) at (3.35,-1.35)
+{\textbf{Bitstream}\\\textbf{Parsing}};
+
+\node[lbox, minimum width=2.15cm, minimum height=0.82cm] (acbuf) at (6.65,-0.86)
+{\textbf{AC Coeff.}\\\textbf{Headers}\\[-1.75pt]unchanged};
+
+\node[lbox, minimum width=2.25cm, minimum height=0.82cm] (comb) at (6.65,-1.92)
+{\textbf{Combine}\\\textbf{Enc.}\\[-1.75pt]$24\mathrm{B}\!+\!1\mathrm{B}$};
+
+\coordinate (preSplit) at (4.75,-1.35);
+\draw[arr] (enc.east) -- (parse.west);
+\draw[-, line width=0.68pt] (parse.east) -- (preSplit);
+\draw[arr] (preSplit) |- (acbuf.west);
+\draw[arr] (preSplit) |- (comb.west);
+
+% =========================================================
+% 2) DECRYPTION BLOCK: LEFT-TO-RIGHT INVERSE FLOW
+% =========================================================
+\draw[frame] (0,-2.82) rectangle (8.55,-5.85);
+\node[anchor=west, font=\bfseries\normalsize] at (0.18,-3.10) {Decryption Block};
+
+\node[mbox, minimum width=1.68cm, minimum height=1.06cm] (iplcm) at (6.65,-4.38)
+{\textbf{Inv. PLCM}\\[-0.75pt]same $K,\; n{+}r$};
+
+\node[mbox, minimum width=1.60cm, minimum height=1.06cm] (iacm) at (4.00,-4.38)
+{\textbf{Inv. Arnold}\\[-0.75pt]inverse $5\times5$};
+
+\node[lbox, minimum width=2.10cm, minimum height=1.06cm, text width=2.12cm] (drop) at (1.40,-4.38)
+{\textbf{Drop 1B}\\[-1pt]padding};
+
+% Luồng 25B chính đi thẳng từ trên xuống đỉnh Inv. PLCM
+\draw[arr] (comb.south) -- (iplcm.north);
+
+% Left-to-right inverse flow: Inv.PLCM -> Inv.Arnold -> Drop padding.
+\draw[arr] (iplcm.west) -- (iacm.east);
+\draw[arr] (iacm.west) -- (drop.east);
+
+% VÒNG LẶP 5 ROUNDS
+\coordinate (decFbBranch) at (2.9,-4.38);
+\coordinate (decFbTop) at (2.9,-3.45);
+\draw[darr] (decFbBranch) -- (decFbTop) -- node[below, note, midway] {$\times 5$ rounds} (6.65,-3.45);
+
+% =========================================================
+% 3) POST-PROCESSING BLOCK
+% =========================================================
+\draw[frame] (0,-6.17) rectangle (8.55,-8.75);
+\node[anchor=west, font=\bfseries\normalsize] at (0.18,-6.45) {Post-processing Block};
+
+\node[mbox, minimum width=1.95cm, minimum height=1.10cm] (reasm) at (3.85,-7.80)
+{\textbf{Bitstream}\\\textbf{Reassembly}};
+
+\node[sbox, minimum width=1.65cm, minimum height=1.05cm] (out) at (6.55,-7.80)
+{\textbf{Decrypted}\\\textbf{H.264/AVC}\\\textbf{Bitstream}};
+
+% ĐƯỜNG ĐI NGOÀI KHUNG TRÁI
+\draw[arr] (drop.west) -- (-0.3,-4.38) |- (reasm.west);
+
+% Reassembly -> output.
+\draw[arr] (reasm.east) -- (out.west);
+
+% Unchanged AC coefficients and headers
+\coordinate (acOutTop) at (8.9,-0.86);
+\coordinate (acDrop) at ($(reasm.north)+(0,0.450)$);
+\draw[arr] (acbuf.east) -- (acOutTop) |- (acDrop) -- (reasm.north);
+
+\end{tikzpicture}

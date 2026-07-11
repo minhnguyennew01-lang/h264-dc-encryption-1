@@ -1,0 +1,45 @@
+%% TikZ: H.264 NALU structure — bitsteram level
+\begin{tikzpicture}[
+  box/.style={draw, minimum height=0.75cm, text centered, font=\small},
+  stream/.style={box, fill=gray!10, minimum width=1.2cm},
+  nal/.style={box, fill=blue!12},
+  vcl/.style={box, fill=green!15},
+  nonvcl/.style={box, fill=yellow!20},
+  arrow/.style={->, >=stealth},
+]
+
+%% Bitstream row
+\node[stream, minimum width=0.8cm] (s0) at (0,0) {\ldots};
+\node[nal, right=0pt of s0, minimum width=1.4cm] (sc1) {SC\\(4B)};
+\node[nal, right=0pt of sc1, minimum width=0.8cm] (t7) {SPS\\T=7};
+\node[nal, right=0pt of t7, minimum width=1.4cm] (sc2) {SC\\(4B)};
+\node[nal, right=0pt of sc2, minimum width=0.8cm] (t8) {PPS\\T=8};
+\node[nal, right=0pt of t8, minimum width=1.4cm] (sc3) {SC\\(4B)};
+\node[vcl, right=0pt of sc3, minimum width=1.2cm] (t5) {IDR\\T=5};
+\node[nal, right=0pt of t5, minimum width=1.4cm] (sc4) {SC\\(4B)};
+\node[vcl, right=0pt of sc4, minimum width=1.2cm] (t1a) {P\\T=1};
+\node[nal, right=0pt of t1a, minimum width=1.4cm] (sc5) {SC\\(4B)};
+\node[vcl, right=0pt of sc5, minimum width=1.2cm] (t1b) {P\\T=1};
+\node[stream, right=0pt of t1b, minimum width=0.8cm] (s1) {\ldots};
+
+%% Zoom in to IDR NALU
+\node[vcl, below=1.8cm of t5, minimum width=1.2cm] (idt) {IDR (T=5)};
+\node[box, right=0pt of idt, fill=gray!20, minimum width=1.4cm] (hdr18) {Header\\1–18};
+\node[box, right=0pt of hdr18, fill=orange!40, minimum width=2.0cm] (dc25) {\textbf{DC}\\25 bytes};
+\node[box, right=0pt of dc25, fill=blue!10, minimum width=1.6cm] (rem) {Remain\\payload};
+
+%% Arrow from T5 down
+\draw[arrow, dashed] (t5.south) -- (idt.north);
+
+%% DC annotation
+\draw[<->, orange!80!black, thick]
+  ([yshift=-0.15cm]dc25.south west) -- ([yshift=-0.15cm]dc25.south east)
+  node[midway, below, font=\footnotesize] {offset 19..43};
+
+%% Legend
+\node[vcl, minimum width=0.6cm, minimum height=0.4cm] (leg1) at (0,-3.4) {};
+\node[right=2pt of leg1, font=\footnotesize] {VCL (Type 1, 5) — được mã hoá};
+\node[nonvcl, minimum width=0.6cm, minimum height=0.4cm, right=2.8cm of leg1] (leg2) {};
+\node[right=2pt of leg2, font=\footnotesize] {Non-VCL (SPS, PPS) — không mã hoá};
+
+\end{tikzpicture}

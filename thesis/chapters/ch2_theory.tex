@@ -1,0 +1,566 @@
+%% Chương 2: Cơ sở lý thuyết
+\clearpage
+\phantomsection
+\section*{CHƯƠNG 2. CƠ SỞ LÝ THUYẾT}
+\addcontentsline{toc}{section}{\numberline{}CHƯƠNG 2. CƠ SỞ LÝ THUYẾT}
+\setcounter{section}{2}
+\setcounter{subsection}{0}
+\setcounter{figure}{0}
+\setcounter{table}{0}
+\setcounter{equation}{0}
+
+\subsection{Chuẩn H.264/AVC}
+
+\subsubsection{Lịch sử và vị trí của H.264}
+
+H.264/AVC (Advanced Video Coding) là chuẩn nén video được phát triển chung bởi
+ITU-T Video Coding Experts Group (VCEG) và ISO/IEC Moving Picture Experts Group (MPEG),
+được công bố lần đầu năm 2003 và liên tục cập nhật đến nay \cite{itu_h264}.
+Chuẩn này có tên gọi song song là H.264 (trong hệ thống ITU-T) và MPEG-4 AVC
+(trong hệ thống ISO/IEC 14496-10).
+
+So với các chuẩn tiền nhiệm như H.263 hay MPEG-2, H.264 đạt mức nén gấp 2 lần
+tại cùng chất lượng hình ảnh. Điều này đạt được thông qua nhiều kỹ thuật tiên tiến
+như dự đoán chuyển động đa tham chiếu (multi-reference motion prediction), biến đổi
+integer DCT 4$\times$4, mã hoá entropy CABAC (Context-Adaptive Binary Arithmetic Coding),
+và deblocking filter. Sự kết hợp giữa chất lượng nén cao và tính tương thích phần cứng
+rộng làm cho H.264 trở thành chuẩn video phổ biến nhất trong suốt hơn hai thập kỷ.
+
+\subsubsection{Kiến trúc phân lớp của H.264}
+
+Chuẩn H.264 được thiết kế theo kiến trúc hai lớp tách biệt:
+
+\begin{itemize}
+  \item \textbf{VCL (Video Coding Layer):} Lớp mã hoá video thuần túy, chịu trách
+        nhiệm nén dữ liệu ảnh. VCL xử lý các slice (đơn vị mã hoá độc lập),
+        macroblock (khối ảnh 16$\times$16 pixel), và các phép biến đổi toán học.
+
+  \item \textbf{NAL (Network Abstraction Layer):} Lớp trừu tượng mạng, đóng gói
+        dữ liệu VCL thành các đơn vị NALU (NAL Unit) phù hợp với truyền tải
+        qua các giao thức mạng khác nhau (RTP, HTTP, v.v.) hoặc lưu trữ.
+\end{itemize}
+
+Sự tách biệt này cho phép cùng một chuẩn nén hoạt động trên nhiều môi trường
+truyền tải khác nhau mà không cần thay đổi phần mã hoá video cốt lõi.
+
+\subsubsection{Cấu trúc NAL Unit (NALU)}
+
+Mỗi NAL Unit là đơn vị cơ bản của luồng bit H.264. Trong định dạng Annex B
+(byte stream format --- định dạng được sử dụng trong nghiên cứu này), mỗi NALU
+được ngăn cách bởi start code:
+
+\begin{itemize}
+  \item Start code 4 bytes: \texttt{0x00 0x00 0x00 0x01}
+  \item Hoặc start code 3 bytes: \texttt{0x00 0x00 0x01} (cho các NALU không phải đầu tiên trong access unit)
+\end{itemize}
+
+Sau start code là payload của NALU, bắt đầu bằng \textbf{NAL header} (1 byte) với cấu trúc:
+
+\begin{table}[ht]
+\centering
+\caption{Cấu trúc byte NAL header (1 byte)}
+\label{tab:nal_header}
+\begin{tabular}{cccl}
+\toprule
+Bit & Tên trường & Kích thước & Ý nghĩa \\
+\midrule
+7   & forbidden\_zero\_bit  & 1 bit  & Luôn = 0 (kiểm tra lỗi) \\
+5-6 & nal\_ref\_idc         & 2 bits & Mức độ tham chiếu (0: không tham chiếu) \\
+0-4 & nal\_unit\_type       & 5 bits & Loại NALU (xem Bảng~\ref{tab:nal_types}) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Phân loại NAL Unit}
+
+Trường \texttt{nal\_unit\_type} (5 bit thấp của NAL header) xác định loại dữ liệu
+trong NALU:
+
+\begin{table}[ht]
+\centering
+\caption{Các loại NAL Unit quan trọng trong H.264}
+\label{tab:nal_types}
+\begin{tabular}{cll}
+\toprule
+\texttt{nal\_unit\_type} & Tên & Ý nghĩa \\
+\midrule
+1 & Coded slice (non-IDR) & P-frame (predictive) hoặc B-frame (bi-predictive) \\
+2 & Coded slice data partition A & Phân vùng dữ liệu (ít phổ biến) \\
+5 & IDR (Instantaneous Decoding Refresh) slice & I-frame (Intra-coded) --- keyframe \\
+6 & SEI                   & Supplemental Enhancement Information \\
+7 & SPS                   & Sequence Parameter Set (thông số chung) \\
+8 & PPS                   & Picture Parameter Set (thông số ảnh) \\
+9 & Access Unit Delimiter & Dấu phân cách access unit \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Phân loại trong nghiên cứu:}
+\begin{itemize}
+  \item \textbf{VCL NALU (Video Coding Layer):} Type 1 và Type 5 chứa dữ liệu ảnh
+        thực sự và là đối tượng mã hoá trong nghiên cứu này.
+  \item \textbf{Non-VCL NALU:} Type 7 (SPS), Type 8 (PPS), Type 6 (SEI) chứa
+        thông số cấu hình và metadata --- \textbf{không bị mã hoá}.
+\end{itemize}
+
+Trong file thực nghiệm \texttt{output.h264}, phân phối NALU như sau:
+Type 5 (IDR/I-frame): 155 NALU; Type 1 (P/B-frame): 18.882 NALU; các loại khác: 311 NALU.
+Chiến lược S1 mã hoá 19.037 VCL NALU (Type 1 + Type 5, bỏ qua 311 non-VCL),
+S2 chỉ mã hoá 155 NALU Type 5.
+
+\subsubsection{Intra Prediction và hệ số DC}
+
+Để hiểu tầm quan trọng của hệ số DC, cần nắm cơ chế dự đoán intra của H.264.
+Với I-frame (IDR slice, Type 5), mọi macroblock được mã hoá bằng \textbf{intra prediction}
+--- dự đoán khối ảnh từ các khối đã được mã hoá trong cùng frame, không tham chiếu
+frame khác. Quá trình xử lý một macroblock luma (16$\times$16 pixel) diễn ra như sau:
+
+\begin{enumerate}
+  \item \textbf{Intra prediction:} Dự đoán giá trị pixel từ các pixel lân cận đã biết.
+        H.264 hỗ trợ 13 chế độ dự đoán intra 4$\times$4 và 4 chế độ 16$\times$16.
+        Kết quả là \emph{residual} (sai lệch giữa thực tế và dự đoán).
+
+  \item \textbf{Biến đổi integer DCT:} Residual $R$ (4$\times$4 hoặc 8$\times$8) được
+        biến đổi bằng integer approximation của DCT:
+        \begin{equation}
+        Y = H \cdot R \cdot H^T
+        \end{equation}
+        trong đó $H$ là ma trận biến đổi integer DCT. Kết quả $Y$ có 16 hệ số,
+        trong đó \textbf{hệ số DC là $Y[0,0]$} --- hệ số tần số thấp nhất,
+        biểu diễn giá trị trung bình của khối residual.
+
+  \item \textbf{Lượng tử hoá:} Các hệ số được lượng tử hoá theo QP (quantization parameter).
+        Hệ số DC thường có weight lượng tử hoá khác với AC để bảo toàn chất lượng.
+
+  \item \textbf{Mã hoá entropy:} Các hệ số sau lượng tử hoá được mã hoá bằng CAVLC
+        hoặc CABAC và ghép vào bitstream.
+\end{enumerate}
+
+\subsubsection{Vị trí hệ số DC trong luồng bit NALU}
+
+Qua phân tích bitstream bằng công cụ \texttt{h264\_analyze} \cite{h264bitstream},
+chúng tôi xác định rằng đối với file \texttt{output.h264} (H.264 Baseline Profile),
+các hệ số DC của slice header chiếm vùng bytes từ offset 19 đến 43 trong payload
+NALU VCL (sau start code):
+
+\begin{itemize}
+  \item \texttt{DC\_OFFSET = 19}: Offset tính từ đầu payload NALU (sau start code).
+  \item \texttt{DC\_SIZE = 25}: Kích thước vùng DC, 25 bytes.
+  \item Vị trí tuyệt đối: \texttt{nal\_pos + 19} đến \texttt{nal\_pos + 43}
+        (với \texttt{nal\_pos} là vị trí byte đầu của payload NALU trong file).
+\end{itemize}
+
+\begin{figure}[ht]
+\centering
+\input{figures/dc_offset_diagram}
+\caption{Bố cục byte trong NALU VCL: vùng DC (bytes 19--43) được tô màu cam;
+         bytes 0--18 là header không mã hoá}
+\label{fig:dc_offset}
+\end{figure}
+
+\textbf{Lưu ý quan trọng:} DC\_OFFSET = 19 được xác định bằng phân tích thực nghiệm
+trên file cụ thể này (H.264 Baseline Profile). Với các profile khác (Main, High),
+vị trí này có thể thay đổi --- đây là hạn chế được thảo luận trong Chương 7.
+
+Các bytes 0--18 (header NALU) chứa thông tin slice như: frame number, picture order
+count, reference frame index --- không được mã hoá để đảm bảo khả năng decode
+frame (với error concealment) ngay cả khi DC bị mã hoá.
+
+\begin{figure}[ht]
+\centering
+\input{figures/nalu_structure}
+\caption{Cấu trúc luồng bit H.264: SPS, PPS, IDR (Type 5) và P-frames (Type 1);
+         zoom vào IDR NALU cho thấy vùng DC 25 bytes}
+\label{fig:nalu_structure}
+\end{figure}
+
+\subsection{Mã hoá chọn lọc (Selective Encryption)}
+
+\subsubsection{Nguyên lý và phân loại}
+
+Mã hoá chọn lọc \cite{cheng_selective} là cách tiếp cận mã hoá dựa trên tính
+quan trọng tri giác (perceptual importance) của các thành phần video. Thay vì
+mã hoá toàn bộ bitstream (chi phí cao), chỉ mã hoá phần tối thiểu đủ để:
+\begin{enumerate}
+  \item Làm mờ nội dung với người xem không có khóa (không thể hiểu nội dung).
+  \item Duy trì khả năng truyền tải (bitstream có thể được parse/route mà không cần decrypt).
+  \item Giảm chi phí tính toán xuống phần nhỏ so với full encryption.
+\end{enumerate}
+
+Các mức độ mã hoá chọn lọc từ ít đến nhiều:
+\begin{itemize}
+  \item \textbf{Header-only:} Chỉ mã hoá SPS/PPS --- file không decode được nhưng
+        thiếu an toàn nếu attacker đoán được header.
+  \item \textbf{DC-only (cách tiếp cận của chúng tôi):} Mã hoá hệ số DC --- balance
+        tốt giữa chi phí và hiệu quả bảo vệ.
+  \item \textbf{DC+Motion Vector:} Kết hợp DC và motion vectors để bảo vệ tốt hơn
+        cho P/B-frames.
+  \item \textbf{DC+AC low frequency:} Mã hoá DC và một số AC coefficients tần số thấp
+        --- chi phí tăng nhưng bảo vệ mạnh hơn.
+\end{itemize}
+
+\subsubsection{Hai chiến lược S1 và S2}
+
+Trong nghiên cứu này, chúng tôi so sánh hai chiến lược mã hoá DC:
+
+\textbf{S1 --- Mã hoá toàn bộ VCL:}
+Mã hoá DC của tất cả NALU có Type 1 (P/B-frame) và Type 5 (I-frame).
+Với file test: 19.037 NALU được mã hoá / 19.348 tổng = 98.4\% NALU.
+S1 bảo vệ mạnh nhất vì cả I-frame lẫn P/B-frames đều bị nhiễu loạn.
+
+\textbf{S2 --- Chỉ mã hoá I-frame:}
+Chỉ mã hoá DC của NALU Type 5 (IDR slice / I-frame).
+Với file test: 155 NALU được mã hoá / 19.348 tổng = 0.8\% NALU.
+S2 hy sinh bảo vệ P/B-frames để đổi lấy chi phí tính toán thấp hơn 120 lần.
+
+\textbf{Lý do I-frame quan trọng hơn:} I-frame là keyframe độc lập --- toàn bộ
+frame được mã hoá intra, không tham chiếu frame khác. Khi I-frame bị nhiễu loạn,
+lỗi có thể lan truyền sang P/B-frames phụ thuộc vào nó. Tuy nhiên, trong thực tế,
+H.264 có cơ chế error concealment nên P/B-frames vẫn hiển thị được (có méo hình).
+
+\subsection{Lý thuyết hỗn độn (Chaos Theory) trong mật mã học}
+
+\subsubsection{Tính chất của hệ hỗn độn}
+
+Các hệ hỗn độn (chaotic systems) có ba tính chất cốt lõi làm cho chúng phù hợp
+cho mật mã học \cite{chen_chaos_video}:
+
+\begin{enumerate}
+  \item \textbf{Nhạy cảm với điều kiện đầu (Sensitivity to Initial Conditions):}
+        Hai quỹ đạo bắt đầu gần nhau sẽ phân kỳ theo hàm mũ theo thời gian.
+        Được định lượng bởi \textbf{Lyapunov exponent} $\lambda > 0$: hai điểm
+        ban đầu cách nhau $\delta_0$ sẽ cách nhau $\delta_0 e^{\lambda t}$ sau
+        thời gian $t$. Với mật mã: thay đổi 1 bit khóa dẫn đến keystream
+        hoàn toàn khác.
+
+  \item \textbf{Đặc tính hỗn loạn (Topological Mixing):} Quỹ đạo hỗn độn
+        ``trộn'' đồng đều không gian trạng thái --- không có vùng nào bị bỏ sót.
+        Điều này đảm bảo tính phân phối đều của keystream.
+
+  \item \textbf{Tính xác định (Deterministic):} Mặc dù có vẻ ngẫu nhiên,
+        hệ hỗn độn hoàn toàn xác định: cùng điều kiện đầu → cùng quỹ đạo.
+        Điều này cho phép giải mã: sinh lại đúng keystream từ cùng khóa.
+\end{enumerate}
+
+Sự tương đồng giữa hệ hỗn độn và mật mã học:
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Mật mã học & Hệ hỗn độn \\
+\midrule
+Khóa K & Điều kiện đầu $x_0$ \\
+Keystream & Quỹ đạo hỗn độn $\{x_n\}$ \\
+Độ nhạy khóa & Lyapunov exponent $\lambda$ \\
+Pseudorandomness & Topological mixing \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection{PLCM --- Piecewise Linear Chaotic Map}
+
+PLCM (Piecewise Linear Chaotic Map) \cite{li_plcm} là ánh xạ hỗn độn 1D trên
+đoạn $[0, 1)$ được định nghĩa bởi:
+
+\begin{equation}
+f(x, p) = \begin{cases}
+  x / p                    & \text{nếu } 0 \leq x < p \\
+  (x - p)/(0.5 - p)        & \text{nếu } p \leq x < 0.5 \\
+  f(1 - x, p)              & \text{nếu } 0.5 \leq x < 1
+\end{cases}
+\label{eq:plcm}
+\end{equation}
+
+Với tham số điều khiển $p \in (0, 0.5)$. Đây là ánh xạ tuyến tính từng đoạn
+(piecewise linear) với hai nhánh: nhánh tăng dần và nhánh giảm dần (đối xứng).
+
+\textbf{Tính chất toán học của PLCM:}
+\begin{itemize}
+  \item \textbf{Lyapunov exponent:} $\lambda = -p\log_2 p - (0.5 - p)\log_2(0.5 - p)$
+        luôn dương với mọi $p \in (0, 0.5)$, đảm bảo hành vi hỗn độn.
+        Giá trị $\lambda$ đạt cực đại tại $p = 0.25$ ($\lambda = 1$).
+
+  \item \textbf{Phân phối đều:} Với $p \in (0, 0.5)$, PLCM có \textbf{invariant measure}
+        là phân phối đều trên $[0, 1)$, nghĩa là keystream sinh ra có phân phối
+        đồng đều --- tốt cho mật mã.
+
+  \item \textbf{So sánh với Logistic Map:} Logistic Map $x_{n+1} = rx_n(1-x_n)$
+        phổ biến hơn nhưng có phân phối phi tuyến. PLCM ưu việt hơn về
+        tính phân phối đều và dễ tính toán (phép tính tuyến tính).
+\end{itemize}
+
+\textbf{Giới hạn IEEE 754 double precision:}
+Trên máy tính thực tế, $x_0$ được biểu diễn bởi số dấu phẩy động double precision
+(64 bit, 52 bit mantissa). Do đó keyspace thực tế của PLCM bị giới hạn bởi
+$\approx 2^{53}$ giá trị phân biệt trong $(0.0001, 0.4999)$ --- đây là hạn chế
+quan trọng của thiết kế hiện tại.
+
+\subsection{Arnold 2D Cat Map}
+
+\subsubsection{Định nghĩa và ma trận biến đổi}
+
+Arnold Cat Map \cite{arnold_catmap} là biến đổi tuyến tính modular trên lưới
+$N \times N$ được định nghĩa bởi:
+
+\begin{equation}
+\begin{pmatrix} x' \\ y' \end{pmatrix}
+= \mathbf{A} \begin{pmatrix} x \\ y \end{pmatrix} \pmod{N}
+= \begin{pmatrix} 1 & P \\ Q & PQ+1 \end{pmatrix}
+\begin{pmatrix} x \\ y \end{pmatrix} \pmod{N}
+\label{eq:arnold}
+\end{equation}
+
+với $P, Q$ là các số nguyên dương và $N$ là kích thước lưới. Ma trận $\mathbf{A}$
+có $\det(\mathbf{A}) = (PQ+1) - PQ = 1$, nên biến đổi là khả nghịch (invertible)
+và bảo toàn diện tích (area-preserving).
+
+\textbf{Tham số trong nghiên cứu này:} $P = 3$, $Q = 11$, $N = 5$ (lưới 5$\times$5,
+tương ứng với 25 bytes DC).
+
+Ma trận biến đổi:
+\begin{equation}
+\mathbf{A} = \begin{pmatrix} 1 & 3 \\ 11 & 34 \end{pmatrix}
+\end{equation}
+
+\subsubsection{Áp dụng cho mảng 1D}
+
+Mảng DC 25 bytes được reshape thành ma trận $5 \times 5$:
+\begin{itemize}
+  \item Byte $i$ tương ứng tọa độ $(x, y) = (i \bmod 5,\; \lfloor i/5 \rfloor)$.
+  \item Sau Arnold map: tọa độ mới $(x', y') = \mathbf{A}(x, y) \pmod{5}$.
+  \item Chỉ số mới: $i' = y' \times 5 + x'$.
+  \item Hoán vị: $\text{permuted}[i'] = \text{DC}[i]$.
+\end{itemize}
+
+\subsubsection{Tính chất bảo mật}
+
+\begin{itemize}
+  \item \textbf{Tính tuần hoàn (Periodicity):} Arnold map là biến đổi tuần hoàn
+        trên $\mathbb{Z}_N^2$. Sau một số lần lặp hữu hạn, lưới trở về trạng thái ban đầu.
+        Với $N = 5$, chu kỳ là 20 (mọi điểm trở về vị trí ban đầu sau 20 lần áp dụng Arnold map).
+        Trong nghiên cứu này chỉ dùng 1 lần lặp nên tránh được vấn đề tuần hoàn.
+
+  \item \textbf{Số hoán vị phân biệt:} Với $N = 5$ và $P, Q \in \{1,\ldots,4\}$,
+        tổng số ma trận Arnold khác nhau $\approx 4 \times 4 = 16 = 2^4$.
+        Cộng với tham số iterations (giả sử 1--4): $\approx 2^5$ keyspace.
+
+  \item \textbf{Mục đích chính:} Arnold map không phải nguồn entropy chính,
+        mà là lớp hoán vị để tăng diffusion: sau hoán vị, các bytes liền kề
+        trong DC không còn liền kề về mặt byte index, làm giảm tương quan cục bộ.
+\end{itemize}
+
+\subsubsection{Biến đổi ngược (Inverse Arnold)}
+
+Ma trận nghịch đảo của $\mathbf{A}$ modulo $N$:
+\begin{equation}
+\mathbf{A}^{-1} = \begin{pmatrix} PQ+1 & -P \\ -Q & 1 \end{pmatrix} \pmod{N}
+= \begin{pmatrix} 34 & -3 \\ -11 & 1 \end{pmatrix} \pmod{5}
+= \begin{pmatrix} 4 & 2 \\ 4 & 1 \end{pmatrix}
+\end{equation}
+
+Hoán vị ngược: $\text{DC}[i] = \text{permuted}[i']$ với $(x, y) = \mathbf{A}^{-1}(x', y') \pmod{5}$.
+
+\subsection{Các thuật toán mã hoá cổ điển}
+
+\subsubsection{AES-128-CTR (Advanced Encryption Standard)}
+
+AES \cite{fips_aes} (FIPS PUB 197) là block cipher được NIST chuẩn hoá năm 2001.
+AES-128 dùng khóa 128-bit, xử lý các block 128-bit (16 bytes) qua 10 vòng
+(rounds) với các phép biến đổi: SubBytes (S-box substitution), ShiftRows, MixColumns,
+và AddRoundKey.
+
+\textbf{Chế độ CTR (Counter Mode):}
+CTR biến AES thành stream cipher bằng cách mã hoá bộ đếm tuần tự:
+\begin{equation}
+ks_i = \text{AES}_K(\text{nonce} \| \text{counter}_i), \quad C_i = P_i \oplus ks_i
+\end{equation}
+
+Với 25 bytes DC, cần 2 block AES: block 1 cho bytes 0--15, block 2 cho bytes 16--24.
+
+\textbf{Ưu điểm:} Tốc độ cao nhờ AES-NI hardware instruction trên x86-64;
+keystream song song hoá được (parallel keystream generation).
+
+\textbf{Điểm yếu trong ngữ cảnh này:} Khi counter = 0 cố định cho mọi NALU,
+keystream $ks = \text{AES}_K(0 \| 0)$ là hằng số --- identitcal keystream reuse
+cho mọi NALU (phân tích chi tiết trong Chương 4).
+
+\subsubsection{DES-OFB (Data Encryption Standard --- Output Feedback Mode)}
+
+DES \cite{fips_des} (FIPS PUB 46-3) là block cipher 64-bit với khóa 64-bit (56-bit
+hiệu dụng sau khi loại bỏ 8 parity bits), được thiết kế năm 1977. DES có 16 vòng
+với Feistel network structure. Hiện nay DES không còn an toàn (brute-force attack
+khả thi với phần cứng hiện đại) nhưng được giữ lại trong nghiên cứu này để so sánh.
+
+\textbf{Chế độ OFB (Output Feedback Mode):}
+\begin{equation}
+O_i = \text{DES}_K(O_{i-1}), \quad O_0 = IV, \quad C_i = P_i \oplus O_i
+\end{equation}
+
+OFB tạo keystream độc lập với plaintext, cho phép mã hoá trước (pre-computation).
+Khi IV = 0 cố định, mọi NALU nhận cùng keystream --- điểm yếu tương tự AES-CTR.
+
+\textbf{So sánh với AES-CTR:} DES chậm hơn AES $\approx$ 8 lần trên x86-64 vì
+thiếu hardware acceleration và S-box lookup table (64-bit→4-bit) không tối ưu.
+
+\subsubsection{RC4 (Rivest Cipher 4)}
+
+RC4 \cite{rc4} là stream cipher được thiết kế bởi Ron Rivest năm 1987, ban đầu
+là trade secret của RSA Security, sau bị leak năm 1994.
+
+\textbf{Cấu trúc RC4:}
+\begin{enumerate}
+  \item \textbf{KSA (Key Scheduling Algorithm):} Khởi tạo S-box 256 byte:
+        $S = [0, 1, \ldots, 255]$, sau đó hoán vị dựa trên khóa K.
+        \begin{equation}
+        j = (j + S[i] + K[i \bmod \text{keylen}]) \bmod 256; \quad S[i] \leftrightarrow S[j]
+        \end{equation}
+
+  \item \textbf{PRGA (Pseudo-Random Generation Algorithm):} Sinh keystream byte-by-byte:
+        \begin{equation}
+        i = (i+1)\bmod 256;\; j = (j+S[i])\bmod 256;\; S[i]\leftrightarrow S[j];\; k = S[(S[i]+S[j])\bmod 256]
+        \end{equation}
+\end{enumerate}
+
+\textbf{Điểm yếu thống kê:} Fluhrer-Mantin-Shamir attack \cite{fms_rc4} chứng minh
+rằng PRGA output ban đầu (đặc biệt là byte đầu tiên) có thiên lệch thống kê
+(statistical bias) --- xác suất xuất hiện 0 là $2/256$ thay vì $1/256$ lý thuyết.
+
+Trong nghiên cứu này, RC4 được khởi tạo lại từ đầu cho mỗi NALU với cùng khóa K,
+nên mọi NALU nhận cùng 25 bytes PRGA output --- điểm yếu cốt lõi.
+
+\subsection{Các chỉ số đánh giá bảo mật}
+
+\subsubsection{NPCR và UACI --- Độ nhạy plaintext}
+
+Wu và cộng sự \cite{wu_npcr} đề xuất NPCR (Number of Pixels Change Rate) và
+UACI (Unified Average Changing Intensity) để đo \textbf{độ nhạy plaintext}:
+khả năng thay đổi 1 bit plaintext gây ra thay đổi ciphertext trên diện rộng.
+
+Cho $P$ là DC bytes gốc và $P'$ là phiên bản với byte đầu flip 1 bit:
+$P'[0] = P[0] \oplus 1$, $P'[i] = P[i]$ với $i > 0$.
+
+Gọi $C_1 = \text{Enc}(P, K)$ và $C_2 = \text{Enc}(P', K)$. Định nghĩa:
+
+\begin{equation}
+D[i] = \begin{cases} 0 & \text{nếu } C_1[i] = C_2[i] \\ 1 & \text{nếu } C_1[i] \neq C_2[i] \end{cases}
+\end{equation}
+
+\begin{equation}
+\text{NPCR} = \frac{\sum_{i=0}^{24} D[i]}{25} \times 100\%
+\label{eq:npcr}
+\end{equation}
+
+\begin{equation}
+\text{UACI} = \frac{1}{25} \sum_{i=0}^{24} \frac{|C_1[i] - C_2[i]|}{255} \times 100\%
+\label{eq:uaci}
+\end{equation}
+
+\textbf{Ngưỡng lý thuyết:}
+\begin{itemize}
+  \item NPCR: Nếu mỗi byte ciphertext thay đổi ngẫu nhiên độc lập khi 1 bit
+        plaintext thay đổi, $\text{NPCR}_{\text{exp}} = (1 - 2^{-8}) \times 100\% \approx 99.61\%$.
+        Ngưỡng thực tế: NPCR $> 99.6\%$.
+
+  \item UACI: Nếu $|C_1[i] - C_2[i]|$ phân phối đều trên $\{0, \ldots, 255\}$,
+        $\text{UACI}_{\text{exp}} = \frac{1}{256} \sum_{d=0}^{255} \frac{d}{255} \times 100\%
+        = \frac{255/2}{255} \times 100\% = 50\%$. Tuy nhiên, với điều kiện
+        byte-difference $\neq 0$ (khi thay đổi xảy ra): $\text{UACI}_{\text{exp}} \approx 33.46\%$.
+\end{itemize}
+
+\subsubsection{Entropy Shannon}
+
+Entropy Shannon \cite{shannon1949} đo độ ngẫu nhiên (randomness) của chuỗi byte:
+
+\begin{equation}
+H = -\sum_{v=0}^{255} p(v) \log_2 p(v) \quad \text{(bits/byte)}
+\label{eq:entropy}
+\end{equation}
+
+trong đó $p(v)$ là xác suất xuất hiện của giá trị byte $v$ trong dữ liệu.
+Entropy tối đa là $H = 8$ bits/byte (phân phối đều trên 256 giá trị).
+Ngưỡng thực tế: $H > 7.9$ bits/byte.
+
+Trong nghiên cứu này, Entropy được tính trên tất cả DC bytes encrypted từ tất cả
+NALU (không phải từng NALU riêng lẻ). Kết quả $H$ cao chứng tỏ DC bytes sau mã hoá
+có phân phối gần đều --- dấu hiệu keystream tốt.
+
+\subsubsection{SSIM --- Structural Similarity Index}
+
+SSIM \cite{wang_ssim} đo tương đồng cấu trúc giữa hai tín hiệu, xét đồng thời
+luminance (độ sáng), contrast (độ tương phản), và structure (cấu trúc):
+
+\begin{equation}
+\text{SSIM}(x, y) = \frac{(2\mu_x\mu_y + c_1)(2\sigma_{xy} + c_2)}{(\mu_x^2 + \mu_y^2 + c_1)(\sigma_x^2 + \sigma_y^2 + c_2)}
+\end{equation}
+
+SSIM $\in [-1, 1]$, với 1 là giống hệt, 0 là không tương quan, $-1$ là phản tương quan.
+
+Trong nghiên cứu này, SSIM được tính trực tiếp trên DC bytes (coi như tín hiệu 1D
+25 phần tử) giữa phiên bản gốc và phiên bản encrypted. SSIM DC $\approx 0$ là tốt.
+
+\subsubsection{TSSIM --- Temporal SSIM}
+
+TSSIM (Temporal SSIM) đo tương đồng cấu trúc theo chiều thời gian giữa các frames
+liên tiếp. Với DC bytes của frame $t$ và frame $t+1$:
+\begin{equation}
+\text{TSSIM}(t) = \text{SSIM}\bigl(\text{DC}(t), \text{DC}(t+1)\bigr)
+\end{equation}
+
+TSSIM baseline (video gốc không mã hoá) phản ánh sự liên tục tự nhiên giữa các frames.
+Sau mã hoá, TSSIM tốt là $<$ baseline: mã hoá phá vỡ cấu trúc temporal.
+
+\subsubsection{PSNR --- Peak Signal-to-Noise Ratio}
+
+PSNR đo chất lượng tái tạo tín hiệu theo thang logarithm:
+
+\begin{equation}
+\text{PSNR} = 10 \log_{10} \frac{\text{MAX}^2}{\text{MSE}}, \quad
+\text{MSE} = \frac{1}{N}\sum_{i=0}^{N-1}(x_i - y_i)^2
+\end{equation}
+
+Với DC bytes (byte values $\in [0, 255]$), MAX = 255.
+\begin{itemize}
+  \item \textbf{PSNR DC encrypted:} Đo giữa DC gốc và DC encrypted. Giá trị thấp
+        ($< 10$ dB) là tốt --- chứng tỏ mã hoá gây ra nhiễu loạn lớn.
+  \item \textbf{PSNR original$\to$decrypted:} Đo giữa file gốc và file giải mã.
+        $\text{PSNR} = \infty$ (MSE = 0) là bắt buộc --- giải mã hoàn toàn chính xác.
+\end{itemize}
+
+\subsubsection{BER và SHA-256 --- Tính đúng đắn}
+
+\textbf{BER (Bit Error Rate):}
+\begin{equation}
+\text{BER} = \frac{\text{số bit khác nhau giữa gốc và giải mã}}{\text{tổng số bit}}
+\end{equation}
+
+BER = 0 là yêu cầu bắt buộc. Bất kỳ bit lỗi nào cũng có thể lan truyền và gây
+decode error cho cả GOP (Group of Pictures).
+
+\textbf{SHA-256:} Hash cryptographic toàn bộ file ($> 219$ MB) giữa gốc và giải mã.
+SHA-256 PASS là kiểm tra byte-exact mạnh nhất: xác suất collision $\approx 2^{-256}$.
+
+\subsection{Tổng kết chỉ số đánh giá}
+
+\begin{table}[ht]
+\centering
+\caption{Tổng kết các chỉ số đánh giá và ngưỡng mục tiêu}
+\label{tab:metrics_summary}
+\begin{tabular}{llll}
+\toprule
+Nhóm & Chỉ số & Ngưỡng tốt & Ghi chú \\
+\midrule
+\multirow{3}{*}{Bảo mật} & NPCR (\%) & $> 99.6$ & Chỉ hybrid \\
+ & UACI (\%) & $\approx 33.46$ & Chỉ hybrid \\
+ & Entropy (bits/byte) & $> 7.9$ & Tất cả algo \\
+\midrule
+\multirow{3}{*}{Chất lượng} & PSNR DC (dB) & $< 10$ & Thấp = tốt \\
+ & SSIM DC & $\approx 0$ & Gần 0 = tốt \\
+ & TSSIM DC & $<$ baseline & Thấp hơn gốc \\
+\midrule
+\multirow{2}{*}{Đúng đắn} & BER & $= 0$ & Bắt buộc \\
+ & SHA-256 & PASS & Bắt buộc \\
+\midrule
+Hiệu năng & DC time (ns/NALU) & Càng thấp càng tốt & So sánh tương đối \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -1,0 +1,263 @@
+%% Chương 1: Mở đầu
+\clearpage
+\phantomsection
+\section*{CHƯƠNG 1. MỞ ĐẦU}
+\addcontentsline{toc}{section}{\numberline{}CHƯƠNG 1. MỞ ĐẦU}
+\setcounter{section}{1}
+\setcounter{subsection}{0}
+\setcounter{figure}{0}
+\setcounter{table}{0}
+\setcounter{equation}{0}
+
+\subsection{Bối cảnh và động lực}
+
+\subsubsection{Sự bùng nổ của video trực tuyến}
+
+Trong thập kỷ vừa qua, lưu lượng video trực tuyến (video streaming) đã tăng trưởng
+với tốc độ chưa từng có. Theo các báo cáo thị trường, video hiện chiếm hơn 80\%
+tổng lưu lượng Internet toàn cầu, và con số này dự báo sẽ vượt 90\% vào năm 2030.
+Sự tăng trưởng này xuất phát từ nhiều xu hướng đồng thời: sự phổ biến của các
+nền tảng phát trực tuyến theo yêu cầu (video-on-demand --- VOD) như YouTube, Netflix,
+TikTok; sự mở rộng của hội nghị truyền hình (video conferencing) sau đại dịch;
+sự phát triển của các hệ thống giám sát an ninh (CCTV, body cam); và sự ra đời
+của các ứng dụng thực tế tăng cường (AR) và thực tế ảo (VR).
+
+Trong bức tranh đó, chuẩn nén video H.264/AVC (ITU-T H.264 / ISO/IEC 14496-10)
+\cite{itu_h264} giữ vị trí thống trị trong nhiều năm. Mặc dù các chuẩn mới hơn như
+H.265/HEVC hay AV1 đang dần được triển khai, H.264 vẫn là lựa chọn mặc định
+trên phần lớn thiết bị và nền tảng nhờ sự cân bằng xuất sắc giữa hiệu quả nén,
+tốc độ mã hoá/giải mã, và tính tương thích phần cứng. Phần lớn camera giám sát,
+thiết bị di động, và hệ thống phát sóng đều xuất ra video ở định dạng H.264.
+
+\subsubsection{Yêu cầu bảo mật nội dung video}
+
+Khi video trở thành phương tiện truyền tải thông tin quan trọng, nhu cầu bảo vệ
+nội dung video khỏi truy cập trái phép ngày càng trở nên cấp thiết. Các tình huống
+điển hình bao gồm:
+
+\begin{itemize}
+  \item \textbf{Bảo vệ bản quyền:} Nội dung giải trí có giá trị cao (phim, thể thao)
+        cần được mã hoá để tránh xem lậu (piracy). Các hệ thống DRM (Digital Rights
+        Management) như Widevine, FairPlay đều dựa trên mã hoá video stream.
+
+  \item \textbf{Video giám sát an ninh:} Hình ảnh camera tại ngân hàng, sân bay,
+        cơ quan chính phủ phải được bảo mật trong quá trình truyền qua mạng để
+        tránh rò rỉ thông tin nhạy cảm hoặc bị giả mạo.
+
+  \item \textbf{Hội nghị truyền hình y tế và pháp lý:} Các buổi tư vấn y tế từ xa,
+        phiên toà trực tuyến yêu cầu mức độ bảo mật cao theo quy định pháp luật.
+
+  \item \textbf{Truyền dữ liệu trên kênh không tin cậy:} Video truyền qua mạng
+        không dây, mạng công cộng có nguy cơ bị nghe lén (eavesdropping)
+        hoặc tấn công man-in-the-middle.
+\end{itemize}
+
+\subsubsection{Hạn chế của mã hoá toàn bộ luồng bit}
+
+Giải pháp truyền thống là mã hoá toàn bộ luồng bit video bằng AES-128 hoặc AES-256
+ở chế độ CBC/CTR. Cách tiếp cận này đảm bảo an toàn tuyệt đối nhưng có những
+hạn chế thực tiễn quan trọng:
+
+\begin{itemize}
+  \item \textbf{Chi phí tính toán cao:} Video 4K 30fps có thể có bitrate 50--100 Mbps.
+        Mã hoá AES toàn bộ bitstream đòi hỏi xử lý $6$--$12$ MB dữ liệu mỗi giây,
+        ngốn đáng kể tài nguyên CPU trên thiết bị nhúng không có AES-NI hardware.
+
+  \item \textbf{Độ trễ tăng:} Trong các ứng dụng thời gian thực (live streaming,
+        video call), mỗi mili-giây trễ thêm đều ảnh hưởng đến trải nghiệm người dùng.
+        Mã hoá toàn bộ có thể tăng độ trễ lên 10--30 ms trên thiết bị nhúng.
+
+  \item \textbf{Không tương thích với codec pipeline:} Một số hệ thống cần
+        transcode video ở phía server trong khi vẫn bảo mật nội dung (proxy encryption),
+        điều này không khả thi khi toàn bộ payload bị mã hoá.
+\end{itemize}
+
+Mã hoá chọn lọc (selective encryption) \cite{cheng_selective} ra đời như một giải pháp
+trung gian: chỉ mã hoá phần quan trọng nhất của video (perceptually significant
+components), giảm chi phí tính toán mà vẫn đảm bảo mức độ bảo vệ chấp nhận được.
+
+\subsection{Vấn đề nghiên cứu}
+
+\subsubsection{Hệ số DC trong H.264 --- vùng nhạy cảm nhất}
+
+Trong chuẩn H.264/AVC, mỗi khối ảnh (macroblock) được nén qua ba bước chính:
+dự đoán nội (intra prediction), biến đổi cosine rời rạc (DCT), và lượng tử hoá
+(quantization). Sau quá trình này, hệ số DC (coefficient ở tần số 0---0) của
+biến đổi DCT là giá trị thể hiện mức cường độ trung bình của khối ảnh.
+Hệ số DC quyết định độ sáng/tối cơ bản của vùng ảnh tương ứng.
+
+Từ góc độ bảo mật tri giác (perceptual security), hệ số DC là mục tiêu lý tưởng
+vì hai lý do:
+\begin{enumerate}
+  \item \textbf{Tác động thị giác lớn:} Nhiễu loạn hệ số DC gây ra distortion
+        có thể nhìn thấy ngay cả ở bitrate cao. PSNR của video bị nhiễu loạn DC
+        giảm xuống khoảng 7--8 dB, tương đương mức méo hình nghiêm trọng.
+        Thử nghiệm của chúng tôi trên file output.h264 xác nhận điều này.
+
+  \item \textbf{Chi phí thấp:} DC bytes chiếm 25 byte/NALU --- dưới 0.01\%
+        kích thước bitstream trung bình. Mã hoá chúng tiêu tốn không đáng kể
+        so với decode toàn bộ video.
+\end{enumerate}
+
+\subsubsection{Điểm yếu của các thuật toán mã hoá stream thông thường}
+
+Khi áp dụng AES-CTR, DES-OFB, hoặc RC4 vào mã hoá chọn lọc DC, một vấn đề thiết
+kế quan trọng thường bị bỏ qua: \textbf{keystream reuse}. Nếu cùng khóa K và cùng
+IV/counter/seed được dùng cho mọi NALU, thì:
+
+\begin{equation}
+\text{Enc}(P_1, K) = P_1 \oplus ks \quad\text{và}\quad \text{Enc}(P_2, K) = P_2 \oplus ks
+\end{equation}
+
+Nếu kẻ tấn công biết $P_1$ (DC bytes của một NALU thông qua phân tích thống kê),
+hắn có thể tính $ks = \text{Enc}(P_1, K) \oplus P_1$, từ đó giải mã mọi NALU khác.
+
+Vấn đề thứ hai là thiếu \textbf{diffusion}: nếu 1 bit của plaintext thay đổi,
+chỉ 1 bit ciphertext thay đổi theo (không có hiệu ứng lan truyền). Điều này dẫn
+đến NPCR (Number of Pixels Change Rate) thấp --- chỉ $\approx 4\%$ (1/25 bytes),
+trong khi mã hoá mạnh cần NPCR $> 99.6\%$.
+
+\subsubsection{Khoảng trống nghiên cứu}
+
+Qua khảo sát các công trình liên quan (phần~\ref{subsec:related_work}), chúng tôi
+nhận thấy phần lớn nghiên cứu mã hoá chọn lọc H.264 tập trung vào:
+(a) lựa chọn vùng mã hoá (entropy coding, motion vectors, DC/AC),
+(b) duy trì tính stream-compliant,
+nhưng ít chú ý đến \textbf{per-NALU keystream variation} và \textbf{intra-NALU diffusion}
+--- hai tính chất cần thiết để đảm bảo plaintext sensitivity (NPCR/UACI).
+
+Nghiên cứu này lấp đầy khoảng trống đó bằng cách đề xuất thuật toán hybrid
+kết hợp ánh xạ hỗn độn (PLCM) tạo keystream khác mỗi NALU, hoán vị Arnold,
+và cơ chế khuếch tán chuỗi (chained diffusion feedback).
+
+\subsection{Công trình liên quan}
+\label{subsec:related_work}
+
+\subsubsection{Mã hoá chọn lọc video H.264}
+
+Cheng và cộng sự \cite{cheng_selective} đề xuất phân loại mã hoá chọn lọc
+thành 3 cấp độ: header encryption, DC coefficient encryption, và motion vector
+encryption. Nghiên cứu chứng minh rằng chỉ cần mã hoá DC là đủ để làm mờ nội dung
+với chi phí dưới 5\% tổng chi phí mã hoá.
+
+Shahid và cộng sự \cite{shahid_selective} nghiên cứu mã hoá chọn lọc cho
+H.264 với yêu cầu duy trì định dạng (format compliance) --- video sau mã hoá
+vẫn có thể được xử lý bởi các thiết bị H.264 tiêu chuẩn. Đây là ràng buộc
+chặt hơn so với cách tiếp cận của chúng tôi.
+
+\subsubsection{Mã hoá video dựa trên lý thuyết hỗn độn}
+
+Chen và cộng sự \cite{chen_chaos_video} đề xuất sử dụng kết hợp logistic map
+và Arnold Cat Map cho mã hoá toàn bộ frame video. Nghiên cứu chứng minh rằng
+hệ thống hỗn độn kết hợp đạt NPCR $> 99.6\%$ và Entropy $\approx 8.0$.
+Tuy nhiên, nghiên cứu đó áp dụng cho ảnh tĩnh, không tối ưu cho bitstream H.264.
+
+Nghiên cứu của chúng tôi kế thừa ý tưởng kết hợp PLCM và Arnold từ \cite{chen_chaos_video}
+nhưng thích nghi cho cấu trúc NALU của H.264 với cơ chế per-NALU nalu\_index
+--- điểm khác biệt then chốt.
+
+\subsubsection{NPCR/UACI như chỉ số đánh giá}
+
+Wu và cộng sự \cite{wu_npcr} hệ thống hoá các chỉ số NPCR và UACI, xác lập
+ngưỡng lý thuyết cho mã hoá tốt: NPCR $> 99.6\%$ và UACI $\approx 33.46\%$.
+Đây là framework đánh giá được chúng tôi áp dụng trực tiếp.
+
+\subsection{Mục tiêu nghiên cứu}
+
+Nghiên cứu này nhằm đạt các mục tiêu cụ thể sau:
+
+\begin{enumerate}
+  \item \textbf{Đề xuất thuật toán hybrid:} Thiết kế và cài đặt thuật toán
+        mã hoá chọn lọc DC H.264 kết hợp PLCM, Arnold 2D Cat Map, và
+        cơ chế khuếch tán chuỗi (chained diffusion feedback), đảm bảo
+        per-NALU keystream variation.
+
+  \item \textbf{So sánh hệ thống:} Cài đặt ba thuật toán so sánh (AES-128-CTR,
+        DES-OFB, RC4) trong cùng pipeline, đánh giá trên các chỉ số đồng nhất:
+        bảo mật (NPCR, UACI, Entropy, SSIM, TSSIM), hiệu năng (ns/NALU), và
+        tính đúng đắn (BER, SHA-256).
+
+  \item \textbf{Phân tích hai chiến lược:} Đánh giá S1 (toàn bộ VCL) và S2
+        (chỉ I-frame) về hiệu năng và bảo mật, làm rõ trade-off giữa phạm vi
+        mã hoá và chi phí tính toán.
+
+  \item \textbf{Thiết kế kiến trúc mở rộng:} Xây dựng IEncryption interface
+        (C++) cho phép tích hợp thuật toán mới mà không thay đổi pipeline
+        --- hướng tới triển khai FPGA trong tương lai.
+\end{enumerate}
+
+\subsection{Phạm vi nghiên cứu}
+
+Để đảm bảo tính tập trung và khả năng tái hiện, nghiên cứu này được giới hạn
+trong phạm vi sau:
+
+\begin{itemize}
+  \item \textbf{Định dạng video:} H.264 raw bitstream (Annex B format). Không
+        hỗ trợ container (MP4, MKV) hoặc các chuẩn khác (H.265, AV1, VP9).
+
+  \item \textbf{Vùng mã hoá:} Chỉ DC bytes tại offset 19, kích thước 25 bytes
+        trong mỗi NALU VCL. Không mã hoá SPS, PPS, SEI, motion vectors,
+        AC coefficients, hay Cabac data.
+
+  \item \textbf{Dataset:} Một file H.264 duy nhất (\texttt{output.h264}),
+        kích thước 219 MB, 19.348 NALU tổng cộng. Đây là hạn chế được thừa
+        nhận (xem Chương 7).
+
+  \item \textbf{Môi trường thực thi:} Linux Ubuntu 22.04 (x86-64), GCC 11,
+        Python 3.12. Không bao gồm FPGA triển khai phần cứng (là hướng phát triển).
+
+  \item \textbf{Mô hình đe doạ:} Nghiên cứu tập trung vào \emph{perceptual security}
+        (làm mờ nội dung thị giác) và \emph{plaintext sensitivity}.
+        Không phân tích IND-CCA, side-channel attacks, hay key management.
+\end{itemize}
+
+\subsection{Đóng góp của nghiên cứu}
+
+Các đóng góp chính của nghiên cứu này bao gồm:
+
+\begin{enumerate}
+  \item \textbf{Thuật toán hybrid mới:} Đề xuất kết hợp PLCM + Arnold 2D + XOR
+        + chained diffusion vào mã hoá DC H.264, đạt NPCR $> 99.69\%$ (S2)
+        và Entropy $\approx 8.0$ --- vượt ngưỡng tiêu chuẩn.
+
+  \item \textbf{Phân tích pipeline paradox:} Lần đầu tiên mô tả và giải thích
+        hiện tượng ``pipeline convergence'' trong S2 --- khi DC $< 1\%$
+        tổng thời gian pipeline, tốc độ thuật toán không ảnh hưởng đến thời gian tổng.
+
+  \item \textbf{Bộ dữ liệu thực nghiệm đầy đủ:} Cung cấp kết quả 12 chỉ số
+        cho 8 tổ hợp (4 thuật toán $\times$ 2 chiến lược) trên cùng một file
+        H.264, cho phép so sánh công bằng (apples-to-apples comparison).
+
+  \item \textbf{Kiến trúc phần mềm mở rộng:} IEncryption interface cho phép
+        thêm thuật toán mới với 0 thay đổi pipeline --- nền tảng cho triển khai
+        FPGA và nghiên cứu tiếp theo.
+\end{enumerate}
+
+\subsection{Cấu trúc báo cáo}
+
+Phần còn lại của báo cáo được tổ chức như sau:
+
+\begin{itemize}
+  \item \textbf{Chương 2 --- Cơ sở lý thuyết:} Trình bày nền tảng kiến thức về
+        chuẩn H.264/AVC (cấu trúc NALU, hệ số DC, cơ chế nén intra), các nguyên
+        lý mật mã hỗn độn (PLCM, Arnold Cat Map), các thuật toán mã hoá cổ điển
+        (AES, DES, RC4), và framework đánh giá (NPCR, UACI, Entropy, SSIM, BER).
+
+  \item \textbf{Chương 3 --- Phương pháp đề xuất:} Mô tả chi tiết thiết kế
+        thuật toán hybrid, bao gồm PLCM keystream generation, Arnold permutation,
+        XOR và chained diffusion, giải mã, phân tích bảo mật và keyspace.
+
+  \item \textbf{Chương 4 --- Các thuật toán so sánh:} Phân tích AES-128-CTR,
+        DES-OFB, RC4 từ góc độ điểm yếu bảo mật trong ngữ cảnh mã hoá chọn lọc,
+        giải thích lý do NPCR/UACI không áp dụng cho các thuật toán này.
+
+  \item \textbf{Chương 5 --- Thiết lập thực nghiệm:} Mô tả môi trường phần
+        cứng/phần mềm, dataset, pipeline C++ end-to-end, và quy trình đo metrics.
+
+  \item \textbf{Chương 6 --- Kết quả và thảo luận:} Phân tích toàn bộ kết quả
+        thực nghiệm về tính đúng đắn, hiệu năng, và bảo mật cho tất cả
+        8 tổ hợp thuật toán-chiến lược.
+
+  \item \textbf{Chương 7 --- Kết luận:} Tổng kết đóng góp, nhận xét hạn chế
+        của nghiên cứu, và đề xuất hướng phát triển trong tương lai.
+\end{itemize}

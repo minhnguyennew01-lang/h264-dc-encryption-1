@@ -1,0 +1,12 @@
+\section*{LỜI NÓI ĐẦU}
+\addcontentsline{toc}{section}{LỜI NÓI ĐẦU}
+
+Trong kỷ nguyên số hóa và truyền thông đa phương tiện hiện đại, việc đảm bảo an toàn và bảo mật dữ liệu video truyền tải là một yêu cầu cấp thiết. Các thuật toán mã hóa khối truyền thống thường đòi hỏi khối lượng tính toán lớn, dễ gây ra độ trễ cao khi xử lý luồng video thời gian thực. Trong bối cảnh đó, phương pháp mã hóa chọn lọc kết hợp với hệ mật mã dựa trên lý thuyết hỗn loạn được xem là một giải pháp đột phá, nhờ khả năng bảo mật thị giác tuyệt đối đồng thời giảm thiểu đáng kể tài nguyên phần cứng.
+
+Đồ án tốt nghiệp “Hệ thống mã hoá video chuẩn H.264 ứng dụng thuật toán mã hoá hỗn loạn đa chiều triển khai trên FPGA” được thực hiện dựa trên nguyên lý hoạt động của các ánh xạ hỗn loạn, cấu trúc luồng dữ liệu chuẩn H.264, đồng thời được triển khai đến mức RTL bằng ngôn ngữ mô tả phần cứng Verilog. Qua quá trình phân tích thuật toán, mô phỏng và kiểm chứng trên thiết bị thực tế, sinh viên có thể thấy được quy trình thiết kế hoàn chỉnh của một lõi IP từ ý tưởng lý thuyết đến hiện thực phần cứng.
+
+Báo cáo này trình bày toàn bộ quá trình thiết kế hệ thống mã hóa và giải mã, bao gồm tổng quan lý thuyết về mật mã hỗn loạn, mô hình kiến trúc hệ thống FSMD, mô tả chi tiết từng phân hệ chức năng (\texttt{crypto\_controller}, \texttt{plcm}, \texttt{confusion\_pipeline}, \texttt{diffusion\_pipeline}) và kết quả mô phỏng. Kết quả cuối cùng cho thấy lõi IP hoạt động chính xác theo thuật toán, đồng thời được triển khai và đánh giá thành công hiệu năng trên bo mạch FPGA, đáp ứng tốt các yêu cầu của bài toán thiết kế.
+
+Em xin chân thành cảm ơn \textbf{TS. Tạ Thị Kim Huệ} đã tận tình định hướng và hướng dẫn trong suốt quá trình thực hiện đồ án này. Do thời gian và kinh nghiệm thực tế còn hạn chế, báo cáo khó tránh khỏi những thiếu sót, em rất mong nhận được sự góp ý của quý thầy cô để có thể tiếp tục hoàn thiện hơn trong các nghiên cứu sau.
+
+\clearpage

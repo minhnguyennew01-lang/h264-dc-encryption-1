@@ -1,0 +1,298 @@
+%% Chương 4: Các thuật toán so sánh
+\clearpage
+\phantomsection
+\section*{CHƯƠNG 4. CÁC THUẬT TOÁN SO SÁNH}
+\addcontentsline{toc}{section}{\numberline{}CHƯƠNG 4. CÁC THUẬT TOÁN SO SÁNH}
+\label{ch:baseline}
+\setcounter{section}{4}
+\setcounter{subsection}{0}
+\setcounter{figure}{0}
+\setcounter{table}{0}
+\setcounter{equation}{0}
+
+\subsection{Tổng quan}
+
+Để đánh giá khách quan thuật toán hybrid đề xuất, ba thuật toán mã hoá cổ điển
+được cài đặt và tích hợp vào cùng pipeline với cùng interface IEncryption.
+Việc so sánh trên cùng dataset, cùng chiến lược (S1/S2), và cùng bộ chỉ số
+đảm bảo tính công bằng (apples-to-apples comparison).
+
+\textbf{Nguyên tắc thiết kế baseline:}
+Ba thuật toán này được cố ý thiết kế với \textbf{keystream cố định}
+(fixed keystream cho mọi NALU) để làm nổi bật điểm yếu của thiết kế không có
+per-NALU variation, qua đó chứng minh giá trị của tính năng per-NALU keystream
+trong thuật toán hybrid.
+
+Các điểm yếu được giới thiệu dưới đây không phải là bản chất yếu kém của AES/DES/RC4
+như thuật toán mật mã --- mà là hệ quả của \emph{chế độ sử dụng cụ thể} trong
+ngữ cảnh mã hoá chọn lọc với fixed keystream. AES được chuẩn hoá FIPS và vẫn
+là thuật toán cực kỳ an toàn khi sử dụng đúng cách (với IV/counter ngẫu nhiên).
+
+\subsection{AES-128-CTR (Advanced Encryption Standard --- Counter Mode)}
+
+\subsubsection{Cài đặt}
+
+AES-128 với chế độ CTR, counter = 0 cố định cho mọi NALU. Khóa K được
+pad/truncate về đúng 16 bytes (128-bit) bằng cách:
+\begin{itemize}
+  \item Nếu $|K| < 16$: pad zero bên phải.
+  \item Nếu $|K| > 16$: truncate hoặc XOR fold.
+\end{itemize}
+
+Với 25 bytes DC, quá trình CTR sinh keystream:
+\begin{itemize}
+  \item Block 1: $ks[0..15] = \text{AES}_K(\texttt{counter=0} \| \texttt{nonce=0})$ (16 bytes)
+  \item Block 2: $ks[16..31] = \text{AES}_K(\texttt{counter=1} \| \texttt{nonce=0})$ (16 bytes, lấy 9 bytes đầu)
+  \item Tổng: 2 lần gọi AES per NALU.
+\end{itemize}
+
+Ciphertext: $C[i] = \text{DC}[i] \oplus ks[i]$ cho $i = 0, \ldots, 24$.
+
+\subsubsection{Phân tích điểm yếu: Keystream reuse}
+
+Do nonce = 0 và counter bắt đầu từ 0 cố định cho mọi NALU, keystream là hằng số:
+\begin{equation}
+ks = \text{AES}_K(0) \| \text{AES}_K(1) \quad \text{(giống nhau cho mọi NALU)}
+\end{equation}
+
+\textbf{Hậu quả 1 --- Known-plaintext attack:}
+Nếu kẻ tấn công có được plaintext $P_1$ (DC bytes của một NALU qua phân tích
+thống kê hoặc kênh bên), hắn tính được:
+\begin{equation}
+ks = C_1 \oplus P_1
+\end{equation}
+Sau đó giải mã mọi NALU khác: $P_j = C_j \oplus ks$.
+
+\textbf{Hậu quả 2 --- IND-CPA violation:}
+Hai NALUs có cùng DC bytes ($P_1 = P_2$) cho ciphertext giống hệt ($C_1 = C_2$).
+Kẻ tấn công phân biệt được ciphertext của cùng plaintext, vi phạm IND-CPA.
+
+\textbf{Hậu quả 3 --- XOR of ciphertexts:}
+\begin{equation}
+C_j \oplus C_k = (P_j \oplus ks) \oplus (P_k \oplus ks) = P_j \oplus P_k
+\end{equation}
+Kẻ tấn công biết XOR của hai plaintext không cần biết khóa.
+
+\subsubsection{Phân tích NPCR/UACI cho AES-CTR fixed}
+
+Phép đo NPCR của Wu \cite{wu_npcr} yêu cầu so sánh $C_1 = \text{Enc}(P)$
+và $C_2 = \text{Enc}(P')$ với $P'[0] = P[0] \oplus 1$.
+
+Với AES-CTR fixed ($ks$ hằng số):
+\begin{align}
+C_1[i] &= P[i] \oplus ks[i] \\
+C_2[i] &= P'[i] \oplus ks[i]
+\end{align}
+
+$C_1[i] \neq C_2[i]$ khi và chỉ khi $P[i] \neq P'[i]$, tức là khi $i = 0$ (byte bị flip).
+
+\begin{equation}
+\text{NPCR}_{\text{AES-fixed}} = \frac{1}{25} \times 100\% = 4\%
+\end{equation}
+
+Giá trị 4\% này xác định bởi cấu trúc toán học (1/25 bytes thay đổi), không có
+ý nghĩa đánh giá bảo mật. Do đó NPCR/UACI được ghi là ``N/A'' cho AES trong báo cáo.
+
+\subsubsection{Lý do giữ lại AES trong so sánh}
+
+Mặc dù có điểm yếu về keystream reuse, AES-128-CTR được giữ lại vì:
+\begin{enumerate}
+  \item AES là chuẩn mật mã được chấp thuận rộng rãi (FIPS 197, NIST), tốc độ cao
+        nhờ AES-NI hardware instruction trên CPU x86-64 hiện đại.
+  \item Kết quả so sánh chứng minh rằng \emph{chế độ hoạt động và thiết kế IV}
+        quan trọng hơn độ mạnh của block cipher. Dùng AES-CTR đúng cách
+        (IV ngẫu nhiên mỗi NALU) sẽ không có điểm yếu này.
+  \item AES đại diện cho nhóm ``thuật toán tiêu chuẩn nhưng thiếu per-NALU variation''.
+\end{enumerate}
+
+\subsection{DES-OFB (Data Encryption Standard --- Output Feedback Mode)}
+
+\subsubsection{Cài đặt}
+
+DES \cite{fips_des} với chế độ OFB, IV = 0 cố định. Khóa K được rút gọn về
+8 bytes (64-bit raw key, 56-bit hiệu dụng sau khi DES bỏ parity bits ở vị trí
+$i \equiv 0 \pmod{8}$).
+
+Sinh keystream OFB:
+\begin{align}
+O_0 &= IV = 0 \\
+O_j &= \text{DES}_K(O_{j-1}), \quad j = 1, 2, \ldots \\
+C[8(j-1)..8j-1] &= \text{DC}[8(j-1)..8j-1] \oplus O_j
+\end{align}
+
+DES block size = 8 bytes, cần 4 block cho 25 bytes ($\lceil 25/8 \rceil = 4$,
+lấy 25 bytes đầu của 32 bytes keystream).
+
+\subsubsection{Điểm yếu bảo mật}
+
+\textbf{Điểm yếu 1 --- Keystream cố định (giống AES-CTR):}
+IV = 0 và K cố định → keystream $O_1, O_2, O_3, O_4$ hằng số → tất cả hệ quả
+của AES-CTR fixed cũng áp dụng cho DES-OFB.
+
+\textbf{Điểm yếu 2 --- Khóa 56-bit đã lỗi thời:}
+Năm 1998, EFF DES Cracker (máy phần cứng chuyên dụng \$250.000) phá vỡ DES
+trong chưa đầy 23 giờ bằng exhaustive key search. Với GPU hiện đại có thể
+thử $\sim10^{12}$ khóa/giây, brute-force 56-bit ($\approx 7.2 \times 10^{16}$
+khóa) cần khoảng 20 ngày.
+
+\textbf{Điểm yếu 3 --- Birthday attack trong OFB:}
+Do OFB là keystream generator tuyến tính trên $\mathbb{Z}_2^{64}$, chu kỳ lý thuyết
+là $2^{64}$. Tuy nhiên, birthday paradox cho thấy sau $\sim 2^{32}$ block ($2^{35}$ bytes),
+có xác suất 50\% keystream cycle lặp lại --- gây keystream reuse cấp block,
+nguy hiểm hơn keystream reuse cấp NALU.
+
+\textbf{Điểm yếu 4 --- Software DES chậm:}
+DES không có hardware acceleration trên x86-64 (khác với AES có AES-NI).
+Cài đặt phần mềm phải dùng S-box lookup table (8 S-boxes $\times$ 6-bit→4-bit),
+dẫn đến throughput thấp hơn AES khoảng 8 lần.
+
+\subsubsection{Anomaly hiệu năng: DES S1 Decrypt}
+
+Trong thực nghiệm (phân tích chi tiết ở Chương 6), DES S1 decrypt pipeline time
+đo được 8.686 s --- bất thường so với encrypt 1.519 s. Tuy nhiên, DC decrypt time
+thực tế = 478 ms (nhất quán với encrypt 447 ms). Nguyên nhân: disk I/O page cache
+miss do pipeline decrypt đọc file mới ($\neq$ file vừa encrypt được cache). Đây là
+artifact hệ thống, không phải lỗi thuật toán.
+
+\subsection{RC4 (Rivest Cipher 4 --- Per-NALU Reinit)}
+
+\subsubsection{Cài đặt}
+
+RC4 được khởi tạo lại hoàn toàn từ đầu với mỗi NALU sử dụng cùng khóa K.
+Mỗi NALU: chạy KSA (256 byte, 256 hoán vị), sau đó lấy 25 bytes đầu của PRGA.
+
+Không giống AES và DES, RC4 là stream cipher thuần túy --- không có khái niệm
+``block'' hay ``IV''. Keystream hoàn toàn xác định bởi khóa K (với RC4 standard).
+
+\subsubsection{Phân tích tốc độ}
+
+RC4 nhanh nhất trong 4 thuật toán do cấu trúc cực kỳ đơn giản:
+\begin{itemize}
+  \item KSA: 256 swap operations $\times$ 1 NALU = 256 operations.
+  \item PRGA: 25 iterations (3 operations/iteration) = 75 operations.
+  \item Tổng: $\approx$ 331 operations/NALU, so với AES: $\sim$2000 operations/NALU.
+\end{itemize}
+
+Kết quả thực nghiệm: RC4 đạt 769 ns/NALU S1, nhanh hơn hybrid $38\times$ và AES $3.6\times$.
+
+\subsubsection{Điểm yếu bảo mật}
+
+\textbf{Điểm yếu 1 --- Keystream cố định:}
+Vì mỗi NALU đều khởi tạo RC4 từ đầu với cùng K, 25 bytes PRGA output đầu tiên
+\textbf{giống hệt nhau cho mọi NALU}. Đây là keystream reuse nghiêm trọng nhất
+trong 3 baseline (vì RC4 không có IV hay counter).
+
+\textbf{Điểm yếu 2 --- Bias thống kê trong output đầu:}
+Fluhrer-Mantin-Shamir attack \cite{fms_rc4} (2001) chứng minh rằng byte 0 của
+RC4 PRGA output có thiên lệch thống kê: byte 0 có xác suất cao hơn là \texttt{K[1] + K[2]}.
+Điều này làm 25 bytes đầu đặc biệt dễ bị tấn công phân tích thống kê.
+
+Phiên bản WPA (Wi-Fi Protected Access) đã bị tấn công thành công bằng cách khai
+thác thiên lệch này, dẫn đến việc RC4 bị cấm trong TLS 1.3 và nhiều giao thức hiện đại.
+
+\textbf{Điểm yếu 3 --- Thiếu diffusion:}
+Tương tự AES-CTR và DES-OFB, RC4 không có cơ chế khuếch tán giữa các bytes.
+1 bit thay đổi plaintext → 1 bit thay đổi ciphertext → NPCR $\approx 4\%$.
+
+\subsection{So sánh định tính 4 thuật toán}
+
+\begin{table}[ht]
+\centering
+\caption{So sánh định tính 4 thuật toán về các tiêu chí thiết kế}
+\label{tab:qualitative}
+\begin{tabular}{lccccc}
+\toprule
+Tiêu chí & Hybrid & AES-CTR & DES-OFB & RC4 \\
+\midrule
+Keystream per-NALU   & \checkmark & $\times$ & $\times$ & $\times$ \\
+Diffusion giữa bytes & \checkmark & $\times$ & $\times$ & $\times$ \\
+NPCR $> 99.6\%$      & \checkmark & N/A & N/A & N/A \\
+Entropy $> 7.9$      & \checkmark & \checkmark & \checkmark & \checkmark \\
+Keyspace $> 2^{56}$  & \checkmark ($2^{58}$) & \checkmark ($2^{128}$) & $\times$ ($2^{56}$) & \checkmark ($2^{128}$) \\
+Tốc độ DC S1 (ns/NALU) & 29.245 & 2.753 & 23.500 & 769 \\
+Chuẩn hoá            & $\times$ & FIPS 197 & FIPS 46-3 & $\times$ \\
+Hardware acceleration & $\times$ & AES-NI & $\times$ & $\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Nhận xét tổng hợp:}
+\begin{itemize}
+  \item Hybrid là thuật toán duy nhất có đầy đủ per-NALU keystream variation
+        và intra-NALU diffusion --- hai tính chất cốt lõi để đạt NPCR $> 99.6\%$.
+  \item AES là lựa chọn tốt nhất trong 3 baseline: chuẩn hoá, tốc độ cao, keyspace lớn.
+        Thiếu điểm duy nhất là per-NALU keystream và diffusion.
+  \item RC4 nhanh nhất nhưng có thêm điểm yếu thống kê (FMS attack), không được
+        khuyến nghị cho ứng dụng mới.
+  \item DES không khuyến nghị: keyspace $2^{56}$ đã bị phá vỡ, chậm (thiếu hardware acceleration).
+\end{itemize}
+
+\subsection{Phân tích toán học: Tại sao NPCR/UACI không áp dụng cho AES/DES/RC4}
+
+\subsubsection{Chứng minh hình thức}
+
+Gọi $P$ là DC bytes gốc và $P' = P \oplus e_0$ với $e_0 = (1, 0, \ldots, 0)$ (flip bit 0 byte 0).
+Gọi $ks$ là keystream cố định (giống nhau cho mọi NALU và mọi plaintext).
+
+\begin{align}
+C_1[i] &= P[i] \oplus ks[i] \label{eq:c1} \\
+C_2[i] &= P'[i] \oplus ks[i] = (P[i] \oplus e_0[i]) \oplus ks[i] \label{eq:c2}
+\end{align}
+
+Trong đó $e_0[i] = 1$ nếu $i = 0$, $e_0[i] = 0$ nếu $i \neq 0$.
+
+Hiệu:
+\begin{equation}
+C_1[i] \oplus C_2[i] = e_0[i] = \begin{cases} 1 & i = 0 \\ 0 & i \neq 0 \end{cases}
+\end{equation}
+
+Do đó $D[i] = 1$ chỉ khi $i = 0$, và $D[i] = 0$ với mọi $i \neq 0$.
+
+\begin{equation}
+\text{NPCR}_{\text{fixed}} = \frac{\sum_{i=0}^{24} D[i]}{25} \times 100\%
+= \frac{1}{25} \times 100\% = 4\%
+\end{equation}
+
+\begin{equation}
+|C_1[0] - C_2[0]| = |(P[0] \oplus ks[0]) - (P'[0] \oplus ks[0])|
+\end{equation}
+
+Vì $P'[0] = P[0] \oplus 1$: nếu bit 0 của $P[0] \oplus ks[0]$ là 0 thì $|C_1[0] - C_2[0]| = 1$;
+nếu là 1 thì $= -1$ về giá trị unsigned, tức là $= 255$ (mod 256).
+
+\begin{equation}
+\text{UACI}_{\text{fixed}} = \frac{|C_1[0] - C_2[0]|}{25 \times 255} \times 100\%
+= \frac{1 \text{ hoặc } 255}{25 \times 255} \times 100\% \in \{0.016\%, 4\%\}
+\end{equation}
+
+Cả hai giá trị này xa ngưỡng $33.46\%$ và hoàn toàn xác định bởi 1 byte.
+Chúng không phản ánh bất kỳ tính chất bảo mật nào, do đó NPCR/UACI được ghi
+là ``N/A'' (không áp dụng) trong tất cả bảng kết quả.
+
+\subsubsection{Ngụ ý cho thiết kế}
+
+Kết quả trên chứng minh:
+\begin{enumerate}
+  \item NPCR $> 99.6\%$ \textbf{không thể đạt được} với bất kỳ thuật toán XOR nào
+        có keystream cố định, bất kể độ mạnh của block/stream cipher.
+
+  \item Để đạt NPCR $> 99.6\%$, \textbf{bắt buộc} phải có hoặc:
+        (a) diffusion feedback (chained diffusion như hybrid), hoặc
+        (b) keystream phụ thuộc vào ciphertext trước (như CBC mode), hoặc
+        (c) cả hai.
+
+  \item Chained diffusion của hybrid giải quyết (a), cho phép đạt NPCR $> 99.6\%$
+        ngay cả khi chỉ mã hoá 25 bytes.
+\end{enumerate}
+
+\subsection{Tổng kết Chương 4}
+
+Ba thuật toán baseline AES-128-CTR, DES-OFB, và RC4 trong cấu hình fixed-keystream
+đều có chung một điểm yếu cốt lõi: \emph{không có per-NALU keystream variation và
+không có intra-NALU diffusion}. Kết quả là NPCR $\approx 4\%$, vi phạm IND-CPA,
+và dễ bị tấn công known-plaintext.
+
+Các điểm yếu này không phải nhược điểm cố hữu của AES/DES/RC4 như thuật toán mật mã
+--- mà là hệ quả của thiết kế keystream cố định trong ngữ cảnh mã hoá chọn lọc NALU.
+Thuật toán hybrid đề xuất giải quyết các điểm yếu này bằng PLCM per-NALU keystream
+và chained diffusion feedback, đạt NPCR $> 99.6\%$ (S2) và Entropy $\approx 8.0$.

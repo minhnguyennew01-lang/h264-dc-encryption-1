@@ -1,0 +1,148 @@
+%% Bảng metrics — trích từ summary_tables_testkey.md (key: testkey, 2026-06-23)
+%% File này được \input từ ch6_results.tex (section counter = 6)
+%% Bảng tự đánh số 6.1, 6.2, ... theo \thetable = \thesection.\arabic{table}
+
+%% ============================================================
+%% Bảng 1: Tổng quan
+%% ============================================================
+\begin{table}[ht]
+\centering
+\caption{Tổng quan thực nghiệm — file output.h264}
+\label{tab:overview}
+\begin{tabular}{lll}
+\toprule
+ & S1 (Type 1 + Type 5) & S2 (Type 5 only) \\
+\midrule
+NALUs mã hoá       & 19{,}037 & 155 \\
+Thuật toán         & hybrid, aes, des, rc4 & hybrid, aes, des, rc4 \\
+Byte-exact verify  & 8/8 PASS & 8/8 PASS \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%% ============================================================
+%% Bảng 2: Performance S1
+%% ============================================================
+\begin{table}[ht]
+\centering
+\caption{Hiệu năng — Chiến lược S1 (19{,}037 NALUs, key: testkey)}
+\label{tab:perf_s1}
+\begin{tabular}{lrrrr}
+\toprule
+Metric & hybrid & aes & des & rc4 \\
+\midrule
+Encrypt time (pipeline, s)  & 1.510 & 0.984 & 1.519 & 1.082 \\
+DC encrypt time (ms)        & 556.751 & 52.416 & 447.375 & 14.649 \\
+DC encrypt / NALU (ns)      & 29{,}245 & 2{,}753 & 23{,}500 & 769 \\
+Decrypt time (pipeline, s)  & 1.633 & 1.008 & 8.686$^\dagger$ & 0.949 \\
+DC decrypt time (ms)        & 692.768 & 55.970 & 478.312 & 10.925 \\
+DC decrypt / NALU (ns)      & 36{,}390 & 2{,}940 & 25{,}125 & 573 \\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}
+\small
+\item $^\dagger$ Pipeline anomaly hệ thống (disk I/O). DC decrypt thực tế = 478 ms, bình thường.
+\end{tablenotes}
+\end{table}
+
+%% ============================================================
+%% Bảng 3: Performance S2
+%% ============================================================
+\begin{table}[ht]
+\centering
+\caption{Hiệu năng — Chiến lược S2 (155 NALUs, key: testkey)}
+\label{tab:perf_s2}
+\begin{tabular}{lrrrr}
+\toprule
+Metric & hybrid & aes & des & rc4 \\
+\midrule
+Encrypt time (pipeline, s)  & 0.990 & 0.837 & 1.109 & 0.960 \\
+DC encrypt time (ms)        & 6.659 & 0.477 & 3.475 & 0.112 \\
+DC encrypt / NALU (ns)      & 42{,}962 & 3{,}079 & 22{,}417 & 724 \\
+DC chiếm \% pipeline encrypt & 0.67\% & 0.057\% & 0.31\% & 0.012\% \\
+Decrypt time (pipeline, s)  & 0.937 & 0.873 & 1.051 & 0.907 \\
+DC decrypt time (ms)        & 7.215 & 0.475 & 3.640 & 0.081 \\
+DC decrypt / NALU (ns)      & 46{,}547 & 3{,}063 & 23{,}484 & 525 \\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}
+\small
+\item Lưu ý: Pipeline time hội tụ (0.84--1.11 s) vì DC $< 1\%$ tổng thời gian;
+I/O đọc/ghi 219 MB chiếm $> 99\%$.
+\end{tablenotes}
+\end{table}
+
+%% ============================================================
+%% Bảng tỉ lệ DC trong pipeline S1
+%% ============================================================
+\begin{table}[ht]
+\centering
+\caption{DC encrypt time chiếm \% pipeline — S1 vs S2}
+\label{tab:dc_percent}
+\begin{tabular}{lrr}
+\toprule
+Thuật toán & DC / pipeline S1 & DC / pipeline S2 \\
+\midrule
+hybrid & 36.9\% & 0.67\% \\
+aes    &  5.3\% & 0.057\% \\
+des    & 29.5\% & 0.31\% \\
+rc4    &  1.35\% & 0.012\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%% ============================================================
+%% Bảng 4: Security
+%% ============================================================
+\begin{table}[ht]
+\centering
+\caption{Chỉ số bảo mật — S1 và S2 (key: testkey)}
+\label{tab:security}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrrrrrrrrr}
+\toprule
+ & & \multicolumn{4}{c}{S1 (19{,}037 NALUs)} & & \multicolumn{4}{c}{S2 (155 NALUs)} \\
+\cmidrule{3-6} \cmidrule{8-11}
+Metric & Ngưỡng & hybrid & aes & des & rc4 & & hybrid & aes & des & rc4 \\
+\midrule
+NPCR plaintext (\%) & $> 99.6$ & 99.5260 & N/A & N/A & N/A & & 99.6903 & N/A & N/A & N/A \\
+UACI plaintext (\%) & $\approx 33.46$ & 32.7414 & N/A & N/A & N/A & & 32.4751 & N/A & N/A & N/A \\
+Entropy DC (bits/byte) & $> 7.9$ & \textbf{7.9996} & 7.9954 & 7.9948 & 7.9949 & & 7.9534 & 7.9484 & 7.9469 & 7.9508 \\
+PSNR DC (dB) & $< 10$ & 7.58 & 7.97 & \textbf{7.30} & 8.03 & & 7.73 & 8.04 & \textbf{7.26} & 7.99 \\
+SSIM DC & $\approx 0$ & \textbf{0.0031} & 0.0819 & $-$0.0586 & 0.0895 & & \textbf{0.0184} & 0.0855 & $-$0.0715 & 0.0783 \\
+TSSIM DC encrypted & $<$ baseline & \textbf{0.0071} & 0.0238 & 0.0217 & 0.0218 & & \textbf{$-$0.0199} & 0.0164 & 0.0082 & 0.0236 \\
+\midrule
+\multicolumn{2}{l}{Baseline TSSIM DC (original)} & \multicolumn{4}{c}{S1 = 0.0163} & & \multicolumn{4}{c}{S2 = 0.0234} \\
+\bottomrule
+\end{tabular}%
+}
+\begin{tablenotes}
+\small
+\item N/A: không áp dụng cho AES/DES/RC4 (keystream cố định, không có diffusion — xem Chương~\ref{ch:baseline}).
+\end{tablenotes}
+\end{table}
+
+%% ============================================================
+%% Bảng 5: Correctness
+%% ============================================================
+\begin{table}[ht]
+\centering
+\caption{Tính đúng đắn — S1 và S2 (kết quả giống nhau)}
+\label{tab:correctness}
+\begin{tabular}{llcccc}
+\toprule
+Metric & Ngưỡng & hybrid & aes & des & rc4 \\
+\midrule
+BER & $= 0$ & 0 & 0 & 0 & 0 \\
+PSNR (original$\to$decrypt, dB) & $= \infty$ & $\infty$ & $\infty$ & $\infty$ & $\infty$ \\
+Codec compliance (encrypted) & OK & OK$^*$ & OK$^*$ & OK$^*$ & OK$^*$ \\
+Codec compliance (decrypted) & PASS & PASS & PASS & PASS & PASS \\
+SHA-256 match & PASS & PASS & PASS & PASS & PASS \\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}
+\small
+\item $^*$ OK + warnings là expected behavior — DC bytes bị mã hoá làm sai H.264 syntax;
+FFmpeg dùng error concealment. File decrypted hoàn toàn sạch (no errors).
+\end{tablenotes}
+\end{table}

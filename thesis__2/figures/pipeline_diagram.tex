@@ -1,0 +1,51 @@
+%% TikZ: End-to-end pipeline diagram
+\begin{tikzpicture}[
+  node distance=0.5cm and 0.3cm,
+  step/.style={draw, rectangle, rounded corners=3pt,
+               minimum width=2.8cm, minimum height=0.65cm,
+               text centered, font=\small, fill=blue!10},
+  file/.style={draw, rectangle, rounded corners=2pt,
+               minimum width=2.8cm, minimum height=0.6cm,
+               text centered, font=\small\ttfamily, fill=gray!12},
+  verify/.style={draw, diamond, aspect=2.2,
+                 minimum width=2.5cm, minimum height=0.6cm,
+                 text centered, font=\small, fill=green!15},
+  metrics/.style={draw, rectangle, rounded corners=3pt,
+                  minimum width=2.8cm, minimum height=0.65cm,
+                  text centered, font=\small, fill=orange!20},
+  arrow/.style={->, >=stealth, thick},
+  label/.style={font=\footnotesize\itshape, gray},
+]
+
+%% Column: Encrypt path
+\node[file]   (orig)    {output.h264 (gốc)};
+\node[step, below=0.4cm of orig]  (extract) {Extract NALU cache};
+\node[step, below=0.4cm of extract] (enc)   {Encrypt DC bytes\\(IEncryption)};
+\node[file, below=0.4cm of enc]  (encf)   {output.enc (đã mã hoá)};
+\node[step, below=0.4cm of encf]  (dec)    {Decrypt DC bytes\\(IEncryption)};
+\node[file, below=0.4cm of dec]  (decf)   {output.dec (giải mã)};
+\node[verify, below=0.4cm of decf] (cmp)   {cmp byte-exact?};
+\node[metrics, below=0.6cm of cmp] (met)   {measure\_metrics.py\\(security/perf/...)};
+\node[file, below=0.4cm of met]  (report) {metrics\_report.txt};
+
+%% Arrows
+\draw[arrow] (orig)    -- (extract);
+\draw[arrow] (extract) -- (enc) node[midway, right, label] {nalu\_info.bin};
+\draw[arrow] (orig)    -- ++(3.2,0) |- (enc);
+\draw[arrow] (enc)     -- (encf);
+\draw[arrow] (encf)    -- (dec);
+\draw[arrow] (orig)    -- ++(3.2,0) |- (dec);
+\draw[arrow] (dec)     -- (decf);
+\draw[arrow] (decf)    -- (cmp);
+\draw[arrow] (orig)    -- ++(3.2,0) |- (cmp);
+\draw[arrow] (cmp)     -- node[right, label] {PASS} (met);
+\draw[arrow] (encf)    -- ++(3.2,0) |- (met);
+\draw[arrow] (decf)    -- ++(3.2,0) |- (met);
+\draw[arrow] (orig)    -- ++(3.2,0) |- (met);
+\draw[arrow] (met)     -- (report);
+
+%% FAIL branch
+\node[right=3.5cm of cmp, font=\small, color=red] (fail) {FAIL → debug};
+\draw[arrow, red] (cmp.east) -- node[above, font=\footnotesize] {FAIL} (fail);
+
+\end{tikzpicture}

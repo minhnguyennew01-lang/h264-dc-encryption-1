@@ -41,3 +41,29 @@ Thumbs.db
 *.mkv
 *.avi
 output*
+
+# Large output directories
+results/
+old_22_06_2026/
+videos/
+
+# Redundant archives
+thesis.zip
+thesis_2.zip
+
+# Claude Code session data
+.claude/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Generated metrics reports
+metrics_report_*.txt
+
+# Compiled pipeline binaries (in subdirs)
+pipelines/pipeline_hybrid_s1_h264analyze
+pipelines/pipeline_hybrid_s2_h264analyze
+pipelines/pipeline_hybrid_decrypt_s1_h264analyze
+pipelines/pipeline_hybrid_decrypt_s2_h264analyze
+extract/extract_nalu_from_h264analyze

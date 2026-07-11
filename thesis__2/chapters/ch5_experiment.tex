@@ -1,0 +1,307 @@
+%% Chương 5: Thực nghiệm
+\clearpage
+\phantomsection
+\section*{CHƯƠNG 5. THIẾT LẬP THỰC NGHIỆM}
+\addcontentsline{toc}{section}{\numberline{}CHƯƠNG 5. THIẾT LẬP THỰC NGHIỆM}
+\setcounter{section}{5}
+\setcounter{subsection}{0}
+\setcounter{figure}{0}
+\setcounter{table}{0}
+\setcounter{equation}{0}
+
+\subsection{Môi trường thực nghiệm}
+
+\subsubsection{Cấu hình phần cứng và phần mềm}
+
+Toàn bộ thực nghiệm được thực hiện trên một máy tính duy nhất nhằm đảm bảo tính nhất quán trong đo lường hiệu năng. Cấu hình cụ thể được liệt kê trong Bảng~\ref{tab:env}.
+
+\begin{table}[ht]
+\centering
+\caption{Môi trường phần cứng và phần mềm thực nghiệm}
+\label{tab:env}
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Thành phần} & \textbf{Cấu hình / Phiên bản} \\
+\hline
+Hệ điều hành        & Ubuntu 22.04 LTS (Linux kernel 6.8.0-124-generic) \\
+\hline
+CPU                  & x86-64 (hỗ trợ AES-NI, SSE4.2) \\
+\hline
+Ngôn ngữ C++         & GCC 11.4, chuẩn C++17, tối ưu \texttt{-O2} \\
+\hline
+Python               & 3.12 với numpy, scipy, scikit-image, opencv-python \\
+\hline
+FFmpeg               & 6.x (decode video, đo PSNR/SSIM frame-level) \\
+\hline
+H.264 analyzer       & h264bitstream \texttt{h264\_analyze}~\cite{h264bitstream} \\
+\hline
+Khóa mã hoá         & \texttt{testkey} (ASCII 7 ký tự) \\
+\hline
+\end{tabular}
+\end{table}
+
+Cờ biên dịch \texttt{-O2} được chọn vì nó kích hoạt hầu hết các tối ưu hoá của GCC (loop unrolling, inlining, register allocation) mà không thay đổi hành vi quan sát được, khác với \texttt{-O3} có thể gây floating-point reordering ảnh hưởng đến tính xác định của PLCM. Đây là cấp tối ưu cân bằng phổ biến nhất trong production.
+
+Về AES-NI, cài đặt AES trong nghiên cứu này tự động sử dụng AES-NI nếu CPU hỗ trợ. Do đó tốc độ AES trong thực nghiệm phản ánh hiệu năng tối ưu với hardware acceleration, tạo điều kiện so sánh công bằng nhất cho AES.
+
+\subsubsection{Thư viện và công cụ bên thứ ba}
+
+Ngoài hai thành phần tự xây dựng là PLCM, Arnold và RC4, nghiên cứu dựa vào bốn thư viện và công cụ bên ngoài. Trung tâm của pipeline phân tích bitstream là \textbf{h264bitstream}~\cite{h264bitstream} --- thư viện C parse H.264 bitstream, cung cấp công cụ \texttt{h264\_analyze} để trích xuất chính xác offset, kích thước và loại của từng NALU trong file Annex B. Cho phần mã hoá, \textbf{OpenSSL} được dùng để triển khai AES-128-CTR và DES-OFB với hardware acceleration tự động trên x86-64. Về phía đo lường, thư viện \textbf{scikit-image} (Python) đảm nhiệm tính SSIM và PSNR trên DC bytes 1D, trong khi \textbf{FFmpeg 6.x} decode file H.264 thành raw frames phục vụ đánh giá chất lượng ở cấp pixel và kiểm tra codec compliance.
+
+\subsection{Dataset}
+
+\subsubsection{File thực nghiệm output.h264}
+
+File thực nghiệm duy nhất là \texttt{videos/output.h264} --- file H.264 raw bitstream định dạng Annex B (byte stream format). Các thông số chi tiết được trình bày trong Bảng~\ref{tab:dataset}.
+
+\begin{table}[ht]
+\centering
+\caption{Thông số file thực nghiệm output.h264}
+\label{tab:dataset}
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Thông số} & \textbf{Giá trị} \\
+\hline
+Kích thước file          & 219 MB (229.376.512 bytes) \\
+\hline
+Định dạng                & H.264 Annex B raw bitstream \\
+\hline
+Profile                  & Baseline Profile \\
+\hline
+Tổng NALU (h264\_analyze) & 19.348 \\
+\hline
+Type 5 (IDR/I-frame)      & 155 \\
+\hline
+Type 1 (P/B-frame)        & 18.882 \\
+\hline
+Non-VCL (SPS, PPS, SEI)  & 311 \\
+\hline
+Số frames video           & 60 \\
+\hline
+NALUs mã hoá S1           & 19.037 (Type 1 + Type 5) \\
+\hline
+NALUs mã hoá S2           & 155 (chỉ Type 5) \\
+\hline
+Tỷ lệ I-frame             & 155 / 19.348 = 0.8\% \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsubsection{Đặc điểm phân phối NALU}
+
+File \texttt{output.h264} có tỷ lệ I-frame = 0.8\% (155/19.348), tương ứng với GOP (Group of Pictures) size $\approx 125$ --- tức cứ 125 frames có 1 keyframe. Đây là cấu hình phổ biến cho video streaming: GOP lớn giúp giảm bitrate nhưng tăng độ trễ khi random seek.
+
+Về phân phối DC bytes, DC bytes trong video tự nhiên có phân phối gần Laplacian (phân phối hai nhánh quanh 0 sau quantization). Phân phối này ảnh hưởng đến kết quả UACI vì $|C_1[i] - C_2[i]|$ phụ thuộc vào giá trị DC gốc.
+
+\subsubsection{Lý do chỉ dùng 1 file thực nghiệm}
+
+Nghiên cứu này giới hạn ở một file video duy nhất vì ba lý do. Trước hết, giới hạn này đảm bảo kiểm soát chặt chẽ các biến độc lập --- chỉ thay đổi thuật toán và chiến lược trong khi giữ nguyên mọi yếu tố khác. Tiếp theo, nó tập trung vào so sánh định lượng giữa các thuật toán trong cùng điều kiện thực nghiệm hoàn toàn đồng nhất. Phạm vi mở rộng đa-video được đề xuất như hướng nghiên cứu tiếp theo trong Chương 10.
+
+Cần thừa nhận hạn chế này: kết quả không đại diện cho mọi loại video (resolution, bitrate, content type). Tuy nhiên, vì cấu trúc NALU và DC offset không thay đổi theo nội dung video mà chỉ thay đổi theo H.264 profile, tính đúng đắn (BER = 0, SHA-256 PASS) có thể được tổng quát hoá sang các file H.264 khác cùng profile.
+
+\subsection{Cấu trúc pipeline C++}
+
+\subsubsection{Tổng quan pipeline}
+
+Pipeline end-to-end được triển khai hoàn toàn bằng C++ (đọc/ghi file, NALU parsing, mã hoá/giải mã), ngoại trừ bước đo metrics được thực hiện bằng Python.
+
+\begin{figure}[ht]
+\centering
+\input{figures/pipeline_diagram}
+\caption{Pipeline end-to-end: từ file H.264 gốc qua mã hoá/giải mã đến đo lường metrics}
+\label{fig:pipeline}
+\end{figure}
+
+\subsubsection{Bước 1: Trích xuất và cache thông tin NALU}
+
+\begin{comment}
+
+
+\begin{lstlisting}[language=bash, caption={Trích xuất NALU offsets và types bằng h264\_analyze}]
+# Bước 1a: Gọi h264_analyze để parse bitstream
+./extract/extract_nalu_from_h264analyze videos/output.h264
+# Output: nalu_cache/output.h264.nalu_info.bin (binary cache)
+\end{lstlisting}
+\end{comment}
+
+Công cụ \texttt{extract\_nalu\_from\_h264analyze} gọi \texttt{h264\_analyze} từ h264bitstream library để parse toàn bộ bitstream và trích xuất ba thông tin cho mỗi NALU: offset byte tuyệt đối (\texttt{nal\_pos}), kích thước NALU (\texttt{nal\_size}) và loại NALU (\texttt{nal\_unit\_type}).
+
+Kết quả được serialize thành file nhị phân \texttt{nalu\_cache/output.h264.nalu\_info.bin}. Cache này cho phép các pipeline mã hoá/giải mã đọc trực tiếp thông tin NALU mà không cần parse lại bitstream, giảm chi phí I/O và đảm bảo tính nhất quán giữa các lần chạy. Parse toàn bộ 19.348 NALU bằng h264\_analyze mất $\sim$2 giây; với 8 pipeline cần chạy, cache giúp tiết kiệm $\sim$16 giây tổng cộng.
+
+\subsubsection{Bước 2: Mã hoá (Encryption)}
+
+\begin{lstlisting}[language=bash, caption={Mã hoá DC bytes với strategy S1 và algo hybrid}]
+./pipelines/pipeline_hybrid_s1_h264analyze \
+    videos/output.h264 testkey --algo hybrid
+# Output: results/output.h264/hybrid_s1/output.h264.s1_hybrid_fixed
+# Timing: in ra DC_ONLY_TIME_MS sau khi hoàn thành
+\end{lstlisting}
+
+Pipeline mã hoá thực hiện năm bước tuần tự. Đầu tiên, đọc toàn bộ file gốc \texttt{output.h264} vào bộ nhớ (219 MB). Tiếp theo, đọc cache NALU info từ \texttt{nalu\_info.bin}. Sau đó, với mỗi NALU có type phù hợp (S1: type 1+5; S2: type 5), trích xuất DC bytes tại \texttt{buffer[nal\_pos + 19 .. nal\_pos + 43]}, gọi \texttt{IEncryption::encrypt(dc\_bytes, key, nalu\_index)} và ghi ciphertext trở lại vào buffer. Bước kế tiếp, ghi toàn bộ buffer (đã sửa DC bytes) ra file output. Cuối cùng, in \texttt{DC\_ONLY\_TIME\_MS}: thời gian thuần của bước mã hoá DC, không tính I/O.
+
+Pipeline nhận các tham số sau: \texttt{--algo} xác định thuật toán (hybrid/aes/des/rc4), \texttt{key} là chuỗi ASCII (testkey trong thực nghiệm), và strategy (S1/S2) được xác định bởi tên binary (\texttt{pipeline\_*\_s1\_*} hoặc \texttt{\_s2\_*}).
+
+\subsubsection{Bước 3: Giải mã (Decryption)}
+
+\begin{lstlisting}[language=bash, caption={Giải mã với cùng key và algo}]
+./pipelines/pipeline_hybrid_decrypt_s1_h264analyze \
+    results/output.h264/hybrid_s1/output.h264.s1_hybrid_fixed \
+    testkey --algo hybrid
+# Output: .../output.h264.s1_hybrid_fixed.decrypted
+\end{lstlisting}
+
+Pipeline giải mã có cấu trúc tương tự mã hoá, chỉ thay \texttt{encrypt()} bằng \texttt{decrypt()} và đầu vào là file encrypted thay vì file gốc. Một yếu tố quan trọng là \texttt{nalu\_index} phải giống hệt lúc mã hoá để PLCM sinh đúng keystream; điều này được đảm bảo bởi việc đọc cùng file cache và duyệt NALU theo cùng thứ tự.
+
+\subsubsection{Bước 4: Xác minh byte-exact}
+
+\begin{lstlisting}[language=bash, caption={Xác minh byte-exact bằng cmp}]
+cmp --silent videos/output.h264 \
+    results/output.h264/hybrid_s1/output.h264.s1_hybrid_fixed.decrypted \
+    && echo 'BYTE-EXACT OK' || echo 'MISMATCH'
+\end{lstlisting}
+
+Lệnh \texttt{cmp} so sánh từng byte hai file (219 MB) và dừng ngay tại byte đầu tiên sai lệch nếu có. Đây là kiểm tra nhanh và dứt khoát trước khi chạy metrics.
+
+\subsubsection{Bước 5: Đo lường metrics}
+
+\begin{lstlisting}[language=bash, caption={Đo metrics cho hybrid S1 với testkey}]
+python3 scripts/measure_metrics.py \
+    --original  videos/output.h264 \
+    --encrypted results/output.h264/hybrid_s1/output.h264.s1_hybrid_fixed \
+    --decrypted results/output.h264/hybrid_s1/output.h264.s1_hybrid_fixed.decrypted \
+    --strategy S1 --algo hybrid --key testkey
+# Output: metrics_report_S1_<timestamp>.txt
+\end{lstlisting}
+
+\subsection{Script đo metrics (measure\_metrics.py)}
+
+\subsubsection{Kiến trúc script}
+
+Script Python \texttt{scripts/measure\_metrics.py} tổng hợp đo lường trên bốn nhóm chỉ số. Về bảo mật, script tính NPCR và UACI (chỉ với Hybrid), Entropy Shannon, SSIM DC và TSSIM DC. Song song với đó, chất lượng thị giác được đánh giá qua PSNR DC giữa file gốc và file encrypted. Tính đúng đắn được kiểm tra bằng BER, PSNR giữa file gốc và file giải mã, cùng với kiểm tra SHA-256 hash match để xác nhận byte-exact. Cuối cùng, số liệu hiệu năng --- DC\_ONLY\_TIME\_MS và pipeline time --- được lấy trực tiếp từ output của pipeline C++.
+
+\subsubsection{Đo NPCR/UACI plaintext sensitivity (chỉ hybrid)}
+
+Đây là bước đặc biệt chỉ áp dụng cho hybrid. Script Python tái cài đặt thuật toán hybrid (bao gồm PLCM, Arnold và chained diffusion) để sinh hai ciphertext và so sánh chúng. Script đọc DC bytes gốc $P$ từ file H.264, tạo $P' = P$ với \texttt{byte[0] XOR 1} (flip bit 0 của byte đầu tiên), rồi với mỗi NALU mã hoá cả $P$ và $P'$ với cùng key và \texttt{nalu\_index}. Cuối cùng tính $D[i]$, NPCR và UACI theo công thức đã trình bày ở Chương 2, rồi lấy trung bình qua tất cả NALU được mã hoá.
+
+Lý do sử dụng Python thay vì gọi C++ binary là để tránh overhead I/O của việc ghi/đọc file 219 MB hai lần; thay vào đó tính toán in-memory trực tiếp. PLCM Python và PLCM C++ phải cho cùng kết quả, và điều này được xác minh bằng cách so sánh 10 bytes keystream đầu tiên giữa hai cài đặt cho \texttt{testkey} và \texttt{nalu\_index} = 0.
+
+\subsubsection{Đo Entropy}
+
+\begin{lstlisting}[language=bash, caption={Tính Entropy Shannon từ DC bytes encrypted}]
+# Trong measure_metrics.py:
+def compute_entropy(data: bytes) -> float:
+    counts = np.bincount(np.frombuffer(data, dtype=np.uint8), minlength=256)
+    probs = counts[counts > 0] / len(data)
+    return float(-np.sum(probs * np.log2(probs)))
+\end{lstlisting}
+
+Entropy được tính trên tất cả DC bytes encrypted từ tất cả NALU, tức trên mảng khoảng $19.037 \times 25 = 475.925$ bytes (S1) hoặc $155 \times 25 = 3.875$ bytes (S2).
+
+\subsubsection{Đo SSIM và TSSIM DC}
+
+SSIM DC được tính giữa DC bytes gốc và DC bytes encrypted, coi mỗi NALU là một tín hiệu 1D 25 phần tử. Giá trị trung bình SSIM qua tất cả NALU là:
+
+\begin{equation}
+\overline{\text{SSIM}}_{\text{DC}} = \frac{1}{N_{\text{enc}}} \sum_{n=1}^{N_{\text{enc}}} \text{SSIM}(\text{DC}_n, C_n)
+\end{equation}
+
+TSSIM DC (Temporal SSIM) đo SSIM giữa DC bytes của frame $t$ và frame $t+1$:
+
+\begin{equation}
+\overline{\text{TSSIM}}_{\text{DC}} = \frac{1}{N_{\text{enc}}-1} \sum_{t=1}^{N_{\text{enc}}-1} \text{SSIM}(\text{DC}_t^{\text{enc}}, \text{DC}_{t+1}^{\text{enc}})
+\end{equation}
+
+\subsubsection{Đo hiệu năng (Timing)}
+
+Thời gian DC encrypt/decrypt được đo từ \textbf{bên trong C++ pipeline} bằng
+\texttt{std::chrono::high\_resolution\_clock}:
+
+\begin{lstlisting}[language=C++, caption={Đo thời gian DC encrypt trong pipeline C++}]
+auto t_dc_start = std::chrono::high_resolution_clock::now();
+
+// Vòng lặp mã hoá tất cả NALU
+for (int i = 0; i < nalu_count; ++i) {
+    if (shouldEncrypt(nalu_type[i], strategy)) {
+        auto dc = extractDC(buffer, nalu_pos[i]);
+        auto enc = cipher->encrypt(dc, key, i);  // IEncryption::encrypt
+        writeDC(buffer, nalu_pos[i], enc);
+    }
+}
+
+auto t_dc_end = std::chrono::high_resolution_clock::now();
+double dc_ms = std::chrono::duration<double, std::milli>(t_dc_end - t_dc_start).count();
+std::cout << "DC_ONLY_TIME_MS=" << dc_ms << std::endl;
+\end{lstlisting}
+
+\texttt{DC\_ONLY\_TIME\_MS} đo \textbf{thuần} thời gian gọi \texttt{encrypt()}, \textbf{không tính} I/O đọc/ghi file 219 MB. Đây là chỉ số so sánh thuật toán chính xác nhất vì loại bỏ hoàn toàn ảnh hưởng của I/O. Pipeline time (tổng) = DC time + I/O time + NALU scan time; trong đó I/O 219 MB chiếm phần lớn pipeline time, đặc biệt với S2 khi chỉ có 155 NALU được mã hoá.
+
+\subsection{Quy trình thực nghiệm đầy đủ}
+
+\subsubsection{Chạy tất cả 8 tổ hợp}
+
+\begin{lstlisting}[language=bash, caption={Script đầy đủ chạy 8 tổ hợp thực nghiệm}]
+# Bước 1: Build tất cả binaries
+make all
+
+# Bước 2: Extract NALU cache (1 lần)
+./extract/extract_nalu_from_h264analyze videos/output.h264
+
+# Bước 3: Chạy tất cả 8 tổ hợp encrypt+decrypt+verify
+for ALGO in hybrid aes des rc4; do
+  for STRAT in s1 s2; do
+    # Encrypt
+    ./pipelines/pipeline_hybrid_${STRAT}_h264analyze \
+        videos/output.h264 testkey --algo $ALGO
+
+    # Decrypt
+    ./pipelines/pipeline_hybrid_decrypt_${STRAT}_h264analyze \
+        results/output.h264/${ALGO}_${STRAT}/output.h264.${STRAT}_${ALGO}* \
+        testkey --algo $ALGO
+
+    # Verify byte-exact
+    cmp --silent videos/output.h264 \
+        results/output.h264/${ALGO}_${STRAT}/*.decrypted \
+        && echo "$ALGO $STRAT: OK" || echo "$ALGO $STRAT: FAIL"
+  done
+done
+
+# Bước 4: Đo metrics cho từng tổ hợp
+for ALGO in hybrid aes des rc4; do
+  for STRAT in S1 S2; do
+    python3 scripts/measure_metrics.py \
+        --original  videos/output.h264 \
+        --encrypted results/... \
+        --decrypted results/...decrypted \
+        --strategy $STRAT --algo $ALGO --key testkey
+  done
+done
+\end{lstlisting}
+
+\subsubsection{Số lần chạy và độ tin cậy}
+
+Mỗi tổ hợp được chạy một lần duy nhất (single run) do thời gian thực nghiệm đáng kể: mỗi pipeline $\sim$1--9 giây $\times$ 8 tổ hợp $\times$ 2 (encrypt + decrypt) tổng khoảng 1 phút. Kết quả timing có thể biến động $\pm$5\% do OS scheduling. Để đảm bảo tính đại diện, chúng tôi sử dụng kết quả của lần chạy cuối cùng sau khi hệ thống đã ổn định (file cache đã warm, OS scheduling ổn định).
+
+\subsection{Tóm tắt thực nghiệm}
+
+\begin{table}[ht]
+\centering
+\caption{Tóm tắt cấu hình thực nghiệm}
+\label{tab:exp_summary}
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Tham số} & \textbf{Giá trị} \\
+\hline
+Số tổ hợp (algo $\times$ strategy) & 8 (4 $\times$ 2) \\
+\hline
+File test & output.h264 (219 MB, 19.348 NALU) \\
+\hline
+Key & \texttt{testkey} \\
+\hline
+Chỉ số đo & 10 (NPCR, UACI, Entropy, SSIM, TSSIM, PSNR, BER, SHA256, DC-time, Pipeline-time) \\
+\hline
+Ngôn ngữ triển khai & C++17 (pipeline) + Python 3.12 (metrics) \\
+\hline
+Thư viện mật mã & OpenSSL (AES, DES), custom (PLCM, Arnold, RC4) \\
+\hline
+\end{tabular}
+\end{table}
